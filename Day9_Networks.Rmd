@@ -226,6 +226,10 @@ syn_96h_dmso_corrs_long <- syn_96h_dmso %>%
   na.omit()
 ```
 
+#### Task
+
+Explore the OTU level networks you obtain, explain what you see. I encourage you to make use of the functions outlined in the next section to carry out comparisons.
+
 ### Advanced: Comparing networks
 
 This section shows you how you can sort of overlay two networks. I think it is pretty hard to visually compare two networks.
@@ -253,7 +257,7 @@ all_corrs %<>%
 all_corrs
 ```
 
-Compare those edge-sets and collect which are shared, differ in sign, or are unique for one. If you dont understand what this does, check the documentation for case_when.
+Compare those edge-sets and collect which are shared, differ in sign, or are unique for one. If you don't understand what this does, check the documentation for case_when.
 
 ```{r}
 all_corrs %<>%  mutate(
@@ -538,7 +542,6 @@ ig_96h_dmso %>% clusters()
 ```{r}
 ig_96h_dmso %>% components()
 ```
-
 
 Union of the two graphs
 
