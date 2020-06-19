@@ -1,0 +1,349 @@
+---
+title: "Day 2: Read quality control and filtering"
+author: "Niklas Schandry"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+# About
+
+Today you will download the sequencing data (reads) and perform quality control and filtering.
+
+Before you can start, you need to setup your session.
+
+```{r setup}
+# Since this is the first real day, load all packages you will need
+###Dada2
+library("dada2")
+
+###Analysis
+library("phyloseq")
+library("taxa")
+library("DESeq2")
+library("phangorn")
+library("DECIPHER")
+
+###Emojis
+#library("remoji") # Not necessary
+
+###iGraph
+library("igraph")
+library("ggnetwork")  #brings igraph fortifier. geoms.
+
+###pcaMethods and corrplot
+library("corrplot")
+library("pcaMethods")
+library("corrr")
+
+###Tidy Tools
+library("tidyverse")
+library("ggthemes")
+library("ggExtra")
+library("stringr")
+library("readxl")
+library("ggforce")
+library("patchwork")
+library("gt")
+library("magrittr")
+```
+
+# Sequencing data
+
+The sequencing data can be downloaded from https://syncandshare.lrz.de/dl/fiXpoWaPsdRcme2jQZzGPnwT/mgcourse.tar.gz [This link has been disabled.].
+This is your first task:
+This files is around 17GB, downloading took around 5 Minutes when I tested it, could be faster or slower now :)
+
+```{r}
+downloader::download("https://syncandshare.lrz.de/dl/fiXpoWaPsdRcme2jQZzGPnwT/mgcourse.tar.gz",
+                     destfile = "mgcourse.tar.gz")
+```
+
+What you downloaded is a gzipped tarball, you need to extract the contents.
+
+```{r}
+untar("mgcourse.tar.gz",
+      exdir = "fastq") ## exdir (folder where the contents of the zip file will go) is relative to the working directory, will create a folder fastq and extract into this
+```
+
+The main skill required to use R successfully, is being able to think in tables and link / join / combine different tables. 
+Here, you will generate a table that contains all the files that were part of the zip file.
+These are split into F1 and F2 reads, corresponding to forward and reverse.
+
+```{r}
+## Define paths
+top_path <- c("") # Is empty because you will work in the working directory.
+read_path <- paste0(top_path, "fastq/")
+
+## Make a paths table
+
+paths <- tibble(
+  F1_path = paste0(read_path, list.files(path = read_path, pattern = "F1.fastq")), 
+  ## This takes all files in the reads folder and filters them for F1.fastq. These are the FORWARD reads
+  F2_path = paste0(read_path, list.files(path = read_path, pattern = "F2.fastq"))
+  ## Same for the reverse reads
+) %>%  ## Here is a pipe. It passes whatever is on the left, as the
+  ## FIRST ARGUMENT into the next function.
+  ## Here, It takes the tibble produced above and passes it to the next function
+  separate(F1_path, c("prefix", "sample_id", "sample_conc_tag"), sep = c("_" ), remove = F) %>% 
+  ## Split path into fields: prefix, sample_id and sample_conc_tag. 
+  ## This is easy because this information is separated by "_" in the filename, so separate does the job.
+  ## F1 and F2 filenames have the same structure, we only need to split one of them to get Metadata fields
+  mutate( 
+    ## Mutate creates new columns in the table. 
+    ## We create the sample_conc_tag column and the prefix column.
+    sample_conc_tag = str_extract(sample_conc_tag, "[A|C|G|T]+"), # This is a regular expression that extracts strings that contain letters ACGT (DNA bases)
+    # This extracts the Tag (sequencing index)
+         prefix = str_extract(prefix, "000000000-[a-zA-Z0-9_]+") 
+    # Fix the prefix field. I forgot why this is neccessary.
+    )
+
+## Read the Sample sheet. This contains additional metadata that relate to the experimental details.
+SynCom_Samples <- read_csv("data/sample_sheet.csv")
+
+## Join the sample sheet and the paths table.
+## This gives a table that contains the paths for each sample, with all metadata available.
+SynCom_Samples %<>% 
+  ## This %<>% is a special pipe. 
+  ## It passes the thing on the left, 
+  ## as the first argument into the function on the right
+  ## just like %>% 
+  ## BUT it also assigns the output of the function on the right back to the object on the left.
+  ## This is equivalent to:
+  ## SynCom_Samples <- SynCom_Samples %>% left_join(...)
+  left_join(paths, by = c("prefix","sample_conc_tag"))
+```
+
+Inspect what you got:
+
+```{r}
+SynCom_Samples %>% str
+```
+
+```{r}
+SynCom_Samples %>% head(10)
+```
+
+
+## Subsetting to one SynCom per group.
+
+Before you continue, it makes sense to subset the table of samples to only those samples that your group is going to analyze. There are 8 Synthetic Communities in this experiment. 
+They are called SynComA to SynComH.
+
+```{r}
+SynCom_Samples %<>% 
+  ## Replace X with the SynCom you are analyzing. This will be the SynCom you are working on for the next weeks. 
+  ## Limit yourself to one SynCom, each one has plenty of data.
+  filter(sample_genotype == "SyncomX")
+```
+
+Save your table for later use (e.g.: Tomorrow)
+
+```{r}
+write_rds(SynCom_Samples, "rds/SynCom_Samples.rds")  
+```
+
+This removes reads that do not belong to the syncom of interest.
+
+```{r}
+files_to_remove <- anti_join(read_csv("data/sample_sheet.csv") %>% left_join(paths, by = c("prefix","sample_conc_tag")), SynCom_Samples) %>% select(F1_path, F2_path) %>% as.data.frame()
+remove <- tibble(files = c(files_to_remove$F1_path, files_to_remove$F2_path))
+unlink(remove)
+```
+
+
+## Quality control.
+
+At this stage, you have subset your data for the Syncom you are interested in. For each syncom there are three treatments, four timepoints. Everything was replicated 5 times.
+This gives 3 x 4 x 5 samples:
+
+```{r}
+3*4*5
+```
+
+A technical detail of this experiment is that multiplexes were prepared by timepoint.
+That means that you should expect more variance between timepoints, than within. It is important to check the quality of each multiplex. You have 15 Samples per multiplex. This can be visualized in one plot per timepoint
+
+Use the dada2 function plotQualityProfile()
+
+### Forward read qualities 
+
+#### 24h 
+
+Produce the plots for each timepoint. Below is a template for 24h timepoint. Copy and modify.
+
+```{r}
+plotQualityProfile(SynCom_Samples %>% # Regular pipe
+                     filter(Timepoint == "24h") %$%  # Pipe that exposes column names, this way we can pass a single, filtered column of paths into this function.
+                     F1_path ) + # plotQualityProfile returns a ggplot, we can add a title
+  ggtitle("24h, FWD") # Feel free to modify
+```
+
+#### 48h
+
+```{r}
+
+```
+
+
+#### 72h
+
+```{r}
+
+```
+
+
+#### 96h
+
+```{r}
+
+```
+
+
+
+### Reverse read qualities
+
+#### 24h
+
+```{r}
+plotQualityProfile(SynCom_Samples %>% filter(Timepoint == "24h") %$%  F2_path ) +
+  ggtitle("24h, REV")
+```
+
+#### 48h
+
+```{r}
+
+```
+
+
+#### 72h
+
+```{r}
+
+```
+
+#### 96h
+
+```{r}
+
+```
+
+### Task: Observations
+
+Please write down what you see in these plots, and how you interpret this.
+
+For the next section:
+Think about trimming (removing everything after a certain position) and quality filtering.
+
+## Read filtering
+
+The raw reads need to be filtered, to remove low-quality information. Base-calling quality drops as the length of the read increases, sometimes libraries have lower qualities than others. This is all normal and expected, but needs to be dealt with.
+
+### Paths for filtered reads
+
+We start by defining where these reads should go.
+
+First, take a look at the columns we will be using for generating the filenames.
+These are sample_description and sample_comments
+
+```{r}
+SynCom_Samples$sample_description
+```
+
+
+```{r}
+SynCom_Samples$sample_comments
+```
+
+We will paste description and comments together. We will also replace all spaces (" ") with underscores ("_"), because whitespace is really, _really_ inconvenient for programming.
+
+```{r}
+# Filtered reads will go here. This simply adds /filtered to the read_path.
+filt_path <- file.path(read_path, "filtered")
+
+# Define information for forward reads
+# This generates a lot of paths. 
+filtFs <- file.path(filt_path, 
+                    paste0(SynCom_Samples$sample_description,
+                           "_",
+                           SynCom_Samples$sample_comments %>%
+                            str_replace(" ", "_"), "_F1_filtered.fastq")) %>%
+          tibble(path = .,
+                 Timepoint = c(rep("24h", 15),
+                               rep("48h", 15),
+                               rep("72h", 15),
+                               rep("96h", 15))
+                 )
+
+filtRs <- file.path(filt_path,
+                    paste0(SynCom_Samples$sample_description,
+                           "_",
+                           SynCom_Samples$sample_comments %>%
+                             str_replace(" ", "_"),
+                           "_F2_filtered.fastq")) %>%
+        tibble(path = . ,
+               Timepoint = c(rep("24h", 15),
+                             rep("48h", 15),
+                             rep("72h", 15),
+                             rep("96h", 15)))
+```
+
+Up until here, we have not really done anything except generate lists of filepaths. 
+It is key for any analysis that the data structure is clear from the beginning. Ideally, you first think of a good structure for your data before you do any analysis. Well structured data can easily be transformed into other layouts, filtered and plotted. Poorly structured data makes everything painful and unintuitive.
+
+Confirm the structure of your list
+
+```{r}
+filtFs
+filtRs
+```
+
+Still, well structured data is only the starting point. 
+
+### Filtering
+
+Consult the documentation of filterAndTrim:
+
+```{r}
+?filterAndTrim
+```
+
+Then do the actual filtering and trimming. You should be able to explain your parameter choices based on the quality profiles.
+This is the syntax for paired end reads.
+
+```{r}
+filter_output <- filterAndTrim(SynCom_Samples %$% F1_path, # Path of the Forward reads
+              filtFs %$% path, # Output path, Forward
+              SynCom_Samples %$% F2_path, # Reverse Reads, raw
+              filtRs %$% path, # Output path, Reverse
+              truncLen = c(280,240), # Truncation. First value is for forward, second is for reverse read
+              maxN=0, # Maximum N (uncalled bases) allowed. None. Do not change
+              truncQ=2, # Quality trimming
+              maxEE = c(2,2),
+              rm.phix=TRUE, # Remove phiX spike-ins
+              # Computer parameters, ignore for now
+              compress=TRUE, 
+              multithread=TRUE,
+              n=5e6) #n was increased from 5e5
+```
+
+## Task: Explain your choice of parameters
+
+Please explain briefly your choice of parameters for filterAndTrim, most importantly truncLen, and justify your choice using the quality profiles.
+
+# End of day 2.
+
+You have finished read quality control, filtering and trimming. You should have an idea of what you did to your reads today.
+
+Reflect on what you did today.

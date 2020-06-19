@@ -1,0 +1,230 @@
+---
+title: "Day 4: Phlyogenetics and preparation of reference databases"
+author: "Niklas Schandry"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+# About
+
+Today, you will prepare a phylogenetic tree of the 16S sequences in your dataset. 
+You will also prepare everything else you need to assign the inferred ASVs to taxonomy and perform the taxonomic assignment.
+Finally, you will prepare additionally metadata that is necessary to work with the phyloseq package, which we will depend on for the actual analysis. Working with the phyloseq package will be the focus of next week.
+
+# Phylogenetic Analysis
+
+We can use a phylogenetic tree to inform later analysis, especially those that rely on phylogenetic distance measures. We will build a phylogenetic tree from the sequence variants identified by dada2.
+
+## Treeing 
+
+### Get Sequences and Align
+
+```{r eval = F}
+seqs <- getSequences(seq_table_no_chim) # Rerieve the sequences from the sequence table
+names(seqs) <- seqs # This propagates to the tip labels of the tree
+```
+
+Use the DECIPHER package to align sequences in R.
+I suggest you check the DECIPHER documentation, in particular this document: [The Art of Multiple Sequence Alignment in R](https://www.bioconductor.org/packages/release/bioc/vignettes/DECIPHER/inst/doc/ArtOfAlignmentInR.pdf)
+
+```{r}
+seqs_aligned <- DECIPHER::AlignSeqs(DNAStringSet(seqs), anchor=NA) # Align sequences
+```
+
+### Make tree
+
+Then, use the phangorn package to build a neighbor-joining tree.
+
+```{r eval = F}
+phang_align <- phyDat(as(seqs_aligned, "matrix"),
+                      type="DNA")
+
+dist_m <- dist.ml(phang_align) # Maximim likelihood distance
+
+tree_NJ <- NJ(dist_m) # Note, tip order != sequence order
+
+fit = pml(tree_NJ, data=phang_align) # ML phylogeny
+
+fit_GTR <- update(fit, k=4, inv=0.2) # Update model, refit
+
+fit_GTR <- optim.pml(fit_GTR, model="GTR", optInv=TRUE, optGamma=TRUE,
+ rearrangement = "stochastic", control = pml.control(trace = 0)) # Optimize tree
+
+## Export tree, mainly because it takes a while to compute.
+write_rds(fit_GTR, "rds/fit_GTR.rds")
+```
+
+# Taxonomic assignment
+
+## Generation of a custom lookup file
+
+Below sources the read_fasta function from the package metacodeR.
+
+```{r}
+source("functions/read_fasta.R")
+```
+
+
+dada (the function) can work with prior knowledge of sequences that are expected to be found. This is because it utilizes a bayesian classsifier, which can incorporate priors. If you are interested in the details of Bayesian classifiers: https://www.ncbi.nlm.nih.gov/pubmed/17586664
+
+This appears to be highly suited for the kind of data you are dealing with, since it is known what should be found in each community. 
+
+This code creates the vector of prior sequences by matching all AtR+S Sphere 16S sequences with a table containing all SynCom related information and then extracting unique sequences.
+
+```{r create list of priors, eval = T}
+Root_16S <- read_fasta("data/16SrRNA_Root_isolates_WGS.fasta") %>% 
+  as.data.frame() %>%
+  rownames_to_column("Strain")
+
+Soil_16S <- read_fasta("data/16SrRNA_Soil_isolates_WGS.fasta") %>% 
+  as.data.frame() %>%
+  rownames_to_column("Strain")
+
+all_16s <- bind_rows(Root_16S, Soil_16S) 
+
+colnames(all_16s) <- c("Strain", "rRNA_16S")
+```
+
+
+```{r eval = F}
+# The SyncomA-H files are not included in the public repository
+SynCom_data <- bind_rows(
+  read_rds("data/syncomA.rds") %>% mutate(SynCom = "A"),
+  read_rds("data/syncomB.rds") %>% mutate(SynCom = "B"),
+  read_rds("data/syncomC.rds") %>% mutate(SynCom = "C"),
+  read_rds("data/syncomD.rds") %>% mutate(SynCom = "D"),
+  read_rds("data/syncomE.rds") %>% mutate(SynCom = "E"),
+  read_rds("data/syncomF.rds") %>% mutate(SynCom = "F"),
+  read_rds("data/syncomG.rds") %>% mutate(SynCom = "G"),
+  read_rds("data/syncomH.rds") %>% mutate(SynCom = "H")
+)
+
+SynCom_data %<>%
+  left_join(all_16s)
+
+SynComs_16S <- SynCom_data %>%
+  dplyr::select(rRNA_16S) %>%
+  unique %>%
+  unlist %>%
+  unname
+```
+
+```{r}
+SynComs_16S <- read_rds("data/Syncom_16S")
+```
+
+
+Since this table is now there, make a SynCom 16S fasta file for taxonomic assignment.
+
+```{r syncom lookup file, eval = F}
+BiocManager::install("seqinr")
+dir.create("outputs")
+###Make a SynCom 16s fasta file for lookup
+SynCom_lookup <- SynCom_data %>%
+  dplyr::select(-SynCom) %>%
+  distinct() %>% 
+  mutate(Taxonomy = str_c("Bacteria", Phylum, Family, Genus, Strain, sep = ";")) 
+
+seqinr::write.fasta(SynCom_lookup$rRNA_16S %>% as.list(),
+                    SynCom_lookup$Taxonomy,
+                    "outputs/SynCom_16SrRNA.fasta")
+
+###Also make a SynCom 16s fasta file without strain info for lookup
+SynCom_lookup <- SynCom_data %>%
+  dplyr::select(-SynCom) %>%
+  distinct() %>% 
+  mutate(Taxonomy = str_c("Bacteria", Phylum, Family, Genus, sep = ";")) 
+
+seqinr::write.fasta(SynCom_lookup$rRNA_16S %>% as.list(),
+                    SynCom_lookup$Taxonomy,
+                    "outputs/SynCom_noStrain_16SrRNA.fasta")
+```
+
+## Obtaining the SILVA reference file
+
+You will need to download this file. 
+It is around 60mb, this should be fast.
+
+```{r}
+downloader::download("https://zenodo.org/record/3731176/files/silva_nr_v138_train_set.fa.gz?download=1",
+                     destfile = "data/silva_nr_v138_train_set.fa.gz")
+```
+
+
+## Taxonomic assignment
+
+Here, you will perform assignment against SILVA reference database and custom lookup files that are limited in scope to the sequences expected to be found.
+It is important to do both, mainly because it might be that you have something in your community that is not supposed to be there.
+
+```{r}
+## Assign taxonomy based on SILVA
+Taxa_silva <- assignTaxonomy(seq_table_no_chim,
+                       "data/silva_nr_v138_train_set.fa.gz", 
+                       multithread=TRUE,
+                       minBoot = 80
+                       )
+
+## Assign taxonomy based on expected strains.
+
+Taxa_syncom <- assignTaxonomy(seq_table_no_chim,
+                       "outputs/SynCom_16SrRNA.fasta", 
+                       taxLevels = c("Kingdom",
+                                     "Phylum",
+                                     "Family",
+                                     "Genus",
+                                     "Strain"), #Why this?
+                       multithread=TRUE,
+                       minBoot = 80
+                       )
+
+write_rds(Taxa_silva, "rds/Taxa_silva.rds")
+write_rds(Taxa_syncom, "rds/Taxa_syncom.rds")
+```
+
+# Metadata
+
+In addtion to a tree and taxonomy, we also need metadata that describes the samples.
+
+## Prepare metadata table
+
+This table is a subset of the larger table you have. It is reformatted to fit with the expectations of the phyloseq() function.
+
+I urge you to familiarize yourself with the structure of this table. The next weeks will require an understanding of the metadata for your samples, you need to know the name and contents of each column to be able to analyze the data.
+
+```{r}
+metadata <- SynCom_Samples %>%
+  dplyr::select(sample_name, Timepoint, sample_genotype, sample_treatment, sample_description , sample_comments)  %>%
+  mutate(Rep = str_extract(sample_comments, "Rep_[0-9]")) %>% 
+  dplyr::select(-sample_comments) %>% 
+  mutate(sample_genotreat = interaction(sample_genotype, sample_treatment)) %>% 
+  as.data.frame() %>% 
+  mutate(sample_name = str_replace(sample_name, "\\.", "_")) %>% # Replace all "." with "_" to ensure the names are identical between metdata and seqtable.
+  set_rownames(.$sample_name)
+
+write_rds(metadata,"rds/metadata.rds")
+```
+
+# End of day 4
+
+Today you prepared a phylogenetic tree of your sequences, performed taxonomic assignment of your amplicons and you prepared a table of metadata for the next steps of the analysis.
+
+# End of week 1
+
+In this week you have prepared the dataset for analysis. So far, this has been a rather dry and technical exercise. If you think data analysis is fun, the next weeks will be more entertaining.
+
+## Task
+
+In a few sentences describe what you have done on days 2-4.
+
+Reflect on what you did today and in week 1. 

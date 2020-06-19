@@ -1,0 +1,42 @@
+---
+title: "Day 1: Session Setup"
+author: "Niklas Schandry"
+date: "April 2020"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+Below installs first the "renv" (R environments) package, which then prepares all packages that are required for this project. This is done via renv::restore().
+This is cool and will save you some time you would otherwise spend manually installing a ton of packages and will hopefully avoid packages conflicts.
+However, we need bioconductor to install some packages.
+
+```{r}
+install.packages("BiocManager")
+BiocManager::install(version = "3.10")
+```
+
+Then we install renv and restore the environment.
+
+For this server, I have cached the packages into a shared directory, so it will take some minutes.
+If you were to install all of these packages, it would probably take 1-2 hours.
+
+```{r}
+install.packages("renv")
+renv::restore()
+```
+
+Run the code above and let me know if you encounter errors or warnings.
+
+
+

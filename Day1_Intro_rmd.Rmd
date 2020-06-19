@@ -1,0 +1,71 @@
+---
+title: "Day1: rmarkdown Intro"
+author: "Niklas Schandry"
+date: "15 4 2020"
+output: html_document
+---
+
+# About
+
+This document is a quick start to rmarkdown
+
+# Headings
+
+This is an intro into r markdown. Lines that start with "#" are marked as Headings, and will be formatted headings in the output document. # is top level heading, ## is second level, ### is third etc.
+
+## A level 2 heading
+
+This is just an example.
+
+# The header
+
+At the top of the document you see something that starts and ends with "---". This describes the output of your document, and some authoring details.
+Please replace the current "output:" part with this:
+
+ output: 
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: zenburn
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+
+This will enable figure captions, change the figure dimensions to be more widescreen, change code highlighting to the zenburn theme, and the overall document tot the cosmo theme. You can chose a different theme, there is a gallery available here https://bootswatch.com/ .
+In addition it will enable a table of contents (TOC) and for html documents it will also enable a "floating" toc, that stays at the same position while you scroll through the document. This toc is of course "clickable" for quick navigation.
+
+# Code
+
+Everything so far was just text. How can you tell rmd that you have R code that should be used for something?
+
+By putting it into something like this, called a code-chunk (you can create these by pressing ctrl+alt+i (cmd+opt+i on mac) in Rstudio):
+
+```{r}
+2+2
+```
+
+By default, the code in this chunk will be printed in the final document, it will also be evaluated and the result is also included. For your reports, you should always include code and output, do not change the chunk settings to hide either of them.
+
+# Plots
+
+As mentioned, plots will be included in the output:
+
+```{r}
+library(tidyverse)
+data("iris")
+iris %>% 
+  ggplot(aes(x = Sepal.Length, y = Sepal.Width)) +
+  geom_point(aes(color = Species))
+```
+
+If you want to run code, just press the little green "play" (triangular) button at the top of each chunk to run the chunk.
+
+# Your task
+
+Press the "knit" button. Look at the output document, and explore different settings of chunks to understand what they do. Reference guide here https://yihui.org/knitr/options/
+
+You can click on the little arrow next to knit to chose a different output format (e.g. pdf)
+
+
+

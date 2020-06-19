@@ -1,0 +1,121 @@
+---
+title: "Workload Metagenomics course"
+author: "Niklas Schandry"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+```{r echo = F, message=F}
+library(tidyverse)
+seminar <- tibble::tibble("Task" = c("Collecting information on the topic",
+                                     "Preparations of presentation (own)",
+                                     "Practicing presentation (own)",
+                                     "Refinement of presentation (own)",
+                                 "Feeback & reflection on own presentation (own, FT)",
+                                 "Participation (10x Presentations; FT)",
+                                 "Reflection of presentation (9x)",
+                                 "Paper reading (10x)",
+                                 "Paper discussion (10x; FT)",
+                                 "Reflection of manuscript discussion (10x)"),
+                      "Time (h)" = c(4, 5, 5, 5, 2, 5, 5, 40, 9, 10),
+                      "Type" = c("Seminar / Presentation", 
+                                 "Seminar / Presentation", 
+                                 "Seminar / Presentation", 
+                                 "Seminar / Presentation", 
+                                 "Seminar / Presentation",
+                                 "Seminar / Presentation",
+                                 "Seminar / Presentation",
+                                 "Seminar / Paper Discussion",
+                                 "Seminar / Paper Discussion", 
+                                 "Seminar / Paper Discussion"))
+
+course <- tibble::tibble("Task" = c("Working through daily protocol (12 days)", "Assignments on Moodle (12 days)", "Daily reflection (12 days)", "Final Discussion and report"),
+                     "Time (h)" = c(60, 12, 6, 12),
+                     "Type" = "Course",
+                     )
+                      
+```
+
+# About this document
+
+This document tabulates the ECTS workload of the Seminar + Course ('Übung') _19442: R-Course and Seminar: Metagenomics + Community analysis_.
+
+# General Info
+
+One ECTS equals 30 hours of 'student' work. 19442 consists of a Seminar (2 ECTS) and a practical-course (3 ECTS).
+
+# Tabulations
+
+## Grand total
+
+Total hours:
+```{r, echo = F}
+rbind(seminar, course) %>% 
+  group_by(Type) %>%
+  gt::gt() %>% 
+   gt::grand_summary_rows(
+   columns = "Time (h)",
+   fns = list(
+     Total = ~sum(., na.rm = TRUE))
+   ) %>% 
+  gt::tab_header(
+   title = gt::md("Breakdown of hours"),
+   subtitle = gt::md("Metagenomics course (19442)")) %>% 
+   gt::tab_footnote(
+    footnote = "FT = Face Time",
+    locations = gt::cells_column_labels(columns = vars(Task)))
+```
+With 1 ECTS equalling 30 hours, this is worth 5 ECTS.
+
+## Seminar
+
+The seminar is divided into presentation, and paper discussion. There will be 10 presentations, that generally introduce a topic, and 10 seminars, where a paper is discussed. The presentations and discussion of papers may take place on different days.
+
+```{r, echo = F}
+seminar %>%
+  group_by(Type) %>%
+  gt::gt() %>% 
+    gt::grand_summary_rows(
+    columns = "Time (h)",
+    fns = list(
+      Total = ~sum(., na.rm = TRUE))
+    ) %>%
+  gt::tab_header(
+    title = gt::md("Breakdown of hours for the Seminar"),
+    subtitle = gt::md("Metagenomics course (19442)")
+  )  %>% 
+  gt::tab_footnote(
+    footnote = "FT = Face Time",
+    locations = gt::cells_column_labels(columns = vars(Task)))
+```
+
+With 1 ECTS equalling 30 hours, this is worth 2 ECTS.
+
+## Course ETCS
+
+Tabulation of hours for the practical:
+
+```{r, echo = F}
+course %>%
+  group_by(Type) %>%
+  gt::gt() %>% 
+    gt::grand_summary_rows(
+    columns = "Time (h)",
+    fns = list(
+      Total = ~sum(., na.rm = TRUE))
+    ) %>%
+  gt::tab_header(
+    title = gt::md("Breakdown of hours for the Course"),
+    subtitle = gt::md("Metagenomics course (19442)")
+  )
+```
+
+With 1 ECTS equalling 30 hours, this is worth 3 ECTS.

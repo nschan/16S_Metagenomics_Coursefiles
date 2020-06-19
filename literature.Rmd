@@ -1,0 +1,153 @@
+---
+title: "Literature List"
+author: "Niklas Schandry"
+date: "April 2020"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+# About
+
+This document describes the Seminar part of the practical course + seminar "Metagenomics". 
+
+The Seminar is split into:
+
+ * Topic presentations (1 topic / student)
+ 
+ * Paper discussion (all)
+ 
+
+# Topic presentations
+
+The topic presentation should introduce your course-mates into a topic related to the course. Each presentation should last ~20 minutes + discussion (flexible).
+
+These topics are available for presentation (order is sort of fixed):
+
+ * Illumina sequencing (technology)
+
+ * What is taxonomy, OTUs, concepts of taxonomic assignment?
+ 
+ * 16SrRNA- Function and use for barcoding, difference to "metagenomics"
+
+ * Holobiont theory, what is it, what does it mean?
+
+ * Root and gut: Differences and similarities (microbiome focus, not physiology)
+ 
+ * Plant associated microbiota: What structures microbiomes?
+
+ * Plant associated microbiota: Who is there?
+
+ * Plant secondary metabolites: benzoxazinoids
+ 
+ * Influence of host genetics on the microbiome
+ 
+ * Microbiome wide association studies: What? How? Does it work?
+ 
+
+# Papers
+
+I will chose papers from the list below for the daily discussions soon. This list is both to give you an idea of the topics, but also to provide starting points for each topic presentation. The list is largely unordered.
+
+# Reviews: Microbiota
+
+## Structure and Functions of the Bacterial Microbiota of Plants
+
+https://www.annualreviews.org/doi/abs/10.1146/annurev-arplant-050312-120106
+
+## The Plant Microbiota: Systems-Level Insights and Perspectives
+
+https://www.annualreviews.org/doi/full/10.1146/annurev-genet-120215-034952#_i17
+
+## Going back to the roots: the microbial ecology of the rhizosphere
+
+https://www.nature.com/articles/nrmicro3109
+
+# Review: Bx
+
+## Allelopathic Plants: Models for Studying Plant–Interkingdom Interactions
+
+https://linkinghub.elsevier.com/retrieve/pii/S1360-1385(19)30304-8
+
+# Primary literature
+
+## Revealing structure and assembly cues for Arabidopsis root-inhabiting bacterial microbiota
+
+https://www.nature.com/articles/nature11336
+
+Basically the starting point of Arabdiopsis microbiota (only bacteria)
+
+## Functional overlap of the Arabidopsis leaf and root microbiota
+
+https://www.nature.com/articles/nature16192
+
+Huge effort to isolate and sequence rhizosphere microbiota,
+
+This is the paper where the isolates used for the experiments are isolated.
+
+## Root exudate metabolites drive plant-soil feedbacks on growth and defense by shaping the rhizosphere microbiota
+
+https://www.nature.com/articles/s41467-018-05122-7
+
+This paper explores how a specific class of maize metabolites (bx) confers microbiome restructuring and shows that the microbiota are heritable. Heritable microbiota drive certain phenotypes.
+
+## Plant-derived coumarins shape the composition of an Arabidopsis synthetic root microbiome
+
+https://www.pnas.org/content/116/25/12558
+
+Effect of Arabidopsis secondary metabolites on synthetic microbiomes.
+
+## Genome wide association study reveals plant loci controlling heritability of the rhizosphere microbiome (preprint)
+
+https://www.biorxiv.org/content/10.1101/2020.02.21.960377v1
+
+## Perspective: Genome‐wide association studies on the phyllosphere microbiome: Embracing complexity in host–microbe interactions
+
+https://onlinelibrary.wiley.com/doi/full/10.1111/tpj.14170
+
+## High-order interactions distort the functional landscape of microbial consortia
+
+http://dx.doi.org/10.1371/journal.pbio.3000550
+
+Complex paper, describing how higher-order interactions complicate studies of (synthetic) consortia.
+
+# Perspective: Keystone taxa
+
+## Keystone taxa as drivers of microbiome structure and functioning
+
+https://www.nature.com/articles/s41579-018-0024-1
+
+# Computational methods / Assignment
+
+## Evaluation of 16S rRNA gene sequencing for species and strain-level microbiome analysis
+
+https://www.nature.com/articles/s41467-019-13036-1
+
+## DADA2: High-resolution sample inference from Illumina amplicon data
+
+https://www.nature.com/articles/nmeth.3869#methods
+
+## Exact sequence variants should replace operational taxonomic units in marker-gene data analysis
+
+https://www.nature.com/articles/ismej2017119
+
+# Ecology & Statistics
+
+## Rarefaction, Alpha Diversity, and Statistics
+
+https://www.frontiersin.org/articles/10.3389/fmicb.2019.02407/full
+
+## Application of multivariate statistical techniques in microbial ecology.
+
+https://paperpile.com/app/p/ed84ec79-ad71-0432-b54e-27aef6ef5812
+

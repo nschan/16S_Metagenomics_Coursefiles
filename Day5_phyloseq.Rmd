@@ -1,0 +1,369 @@
+---
+title: 'Day 5: Working with phyloseq'
+author: "Niklas Schandry"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+# About
+
+Today you will create a phyloseq object and explore what a phyloseq object is.
+
+# Load all required files
+
+This loads the things you have saved as .rds.
+
+```{r}
+seq_table_no_chim <- readRDS("rds/seq_table_no_chim.rds")
+metadata <- readRDS("rds/metadata.rds")
+Taxa_syncom <- readRDS("rds/Taxa_syncom.rds")
+Taxa_silva <- readRDS("rds/Taxa_silva.rds")
+fit_GTR <- readRDS("rds/fit_GTR.rds")
+```
+
+```{r}
+# One for silva lookup
+phyl_silva <- phyloseq(otu_table(seq_table_no_chim, taxa_are_rows =F),
+                  sample_data(metadata),
+                  tax_table(Taxa_silva),
+                  phy_tree = fit_GTR$tree)
+```
+
+
+## Understanding phyloseq.
+
+Phyloseq objects are quite complex, they combine different datasets into one. 
+The otu_table contains all sequences, the sample_data contains metadata on your samples,
+the tax_table contains information on the assignment of sequences and the phy_tree contains the phylogenetic tree of your OTUs. Each of these can be extracted again in different ways; one way is to use the corresponding functions.
+
+Overall structure, this object contains 4 tables.
+
+```{r}
+phyl_silva %>% str
+```
+
+Access otu table
+
+```{r}
+phyl_silva %>% otu_table()
+```
+
+Sample data
+
+```{r}
+phyl_silva %>% sample_data()
+```
+
+Taxa table
+
+```{r}
+phyl_silva %>% tax_table() %>% as.data.frame()
+```
+
+Phylogenetic tree.
+
+```{r}
+phyl_silva %>% phy_tree()
+```
+
+This phyloseq object needs to be processed a little.
+First, it makes sense to agglomorate taxa. What this means is that we take everything that is assigned to a certain taxonomic rank (e.g. everything that belongs to the same Genus), and put it into this genus, without resolving further.
+This reduces the complexity of the analysis. In addition, there should actually only be one strain per Genus in each community, therefore resolving taxonomy until the genus level should be fine.
+
+```{r}
+phyl_silva_glommed <- tax_glom(phyl_silva,
+                 taxrank = "Genus",
+                 NArm =TRUE,
+                 bad_empty = c(NA, 
+                               "",
+                               " ",
+                               "\t",
+                               "Unknown_Family")
+                 )
+```
+
+In addition, we may want to remove low abundance taxa. This process is called pruning (as in removing leaves from a tree), you can imagine it as removing tips (= leaves) from the phylogenetic tree.
+Here, everything that was found more than 100 times in total (across all treatments, replicates and timepoints) is kept, and everything that was seen less often is removed. The idea here is that amplicons that are very low abundance are likely artifacts AND they will complicate the analysis because they might be sample specific.
+
+```{r}
+###Merge Taxa into higher level OTUs
+phyl_silva_pruned <- prune_taxa(c(taxa_sums(phyl_silva_glommed) > 100), 
+                         ###Adjust minimum counts required to retain taxon.These are sums accross all experiments.
+                   phyl_silva_glommed)
+```
+
+## Tasks 
+
+### Prepare a phyloseq object that uses the "Syncom" phylogeny
+
+Create a "phyl_syncom" object, where taxonomy was assigned based on your custom database (Day 4) and perform the same steps as for the phyl_silva object: "Glomming" and pruning.
+
+#### Create
+
+```{r}
+phyl_syncom <- phyloseq()
+```
+
+#### Glom
+
+```{r}
+phyl_syncom_glommed
+```
+
+
+#### Prune
+
+```{r}
+phyl_syncom_pruned
+```
+
+### Visualize what happened.
+
+#### SILVA
+
+The phyloseq package comes with a set of predefined plot functions. They create ggplot2 objects, and you can add layers to them as you can with any other ggplot. 
+
+This plots abundance of each Genus per experimental replicate for each treatment + timepoint combination.
+
+Adjust the title according to the Syncom you are working on.
+
+```{r}
+phyl_silva %>%  
+  plot_bar(x = "Genus",
+           fill = "Rep",
+           facet_grid = sample_treatment~Timepoint) +
+  ggtitle("SynComX, all taxa", subtitle="Genus abundances for timepoints and replicates")
+```
+
+Produce similar plots for the phyl_silva_glommed and phyl_silva_pruned objects.
+
+Glommed
+
+```{r}
+phyl_silva_glommed
+```
+
+Pruned
+
+```{r}
+phyl_silva_pruned
+```
+
+Produce different prunings, where you only retain taxa that occur more than 1000 or 10000 times. Understand the result.
+Using the pipe, you can visualize these results without having to create a different object, like this:
+
+```{r}
+phyl_silva_glommed %>%
+  { prune_taxa(c(taxa_sums(.) > "0"), .) } %>%  # Change this value
+  # The {} above is used to control where the piped object is placed in the function with the ".", without the {}
+  # the function fails when used like this.
+  plot_bar(x = "Genus",
+           fill = "Rep",
+           facet_grid = sample_treatment~Timepoint) +
+  scale_y_log10()
+  ggtitle("SynComX, pruning parameter: CHANGE ME", subtitle = "Genus abundances for timepoints and replicates")
+```
+
+Save the phyl_silva object
+
+```{r}
+write_rds(phyl_silva,"rds/phyl_silva.rds")
+```
+
+Bonus: 
+
+Test your understanding of R and phyloseq.
+Produce something where you can easily assess the impact of different pruning parameters.
+You can use a loop, or any other method you like. Show that your creation works as intended by using 1, 7, 56, 410, and 1001 as cutoffs. Add the cutoff to the title.
+
+```{r}
+
+```
+
+
+#### Syncom
+
+Produce barplots for the syncom taxonomy. Plot the initial object, the glommed and the pruned, as barplots.
+
+```{r}
+phyl_syncom
+```
+
+```{r}
+phyl_syncom_glom
+```
+
+```{r}
+phyl_syncom_pruned
+```
+
+```{r}
+write_rds(phyl_syncom,"rds/phyl_syncom.rds")
+```
+
+#### Comparisons
+
+Compare how many Taxa you lose with each step for the SILVA and the Syncom assignment.
+
+Discuss the differences you observe between SILVA and Syncom.
+
+##### Relating the different assignments.
+
+You may not work with a custom database in other experiments, often there is no clear expectation of which bacteria should be in your sample.
+
+In addition, you probably noticed that there are striking differences in the assignments, these are related to different nomenclatures employed.
+
+Can you figure out how to create a table that contains for each amplicon, the SILVA and the Syncom Genus assignment?
+
+Hint: The information you need is stored in the taxa table of the phyloseq object. You can obtain this table using the tax_table() function
+
+```{r}
+phyl_silva %>% tax_table()
+```
+
+This table has named rows, and the rowname is the actual sequence, which is why you will see only rownames when you print this.
+
+Turn this into a usable table by converting rownames to a column (e.g. "Sequence"). Inspect the table again.
+
+```{r}
+
+```
+
+Create a similar table for the phyl_syncom object and join them together. 
+
+```{r}
+
+```
+
+Print the first 10 rows of the table that relates the different taxonomic assignments.
+
+```{r}
+
+```
+
+## Task
+
+Interpret the barplots that visualize the abundance of each taxon per timepoint and treatment. Discuss what you see based on a pruned object (> 100). Explain the changes you see. Is there anything surprising? Assess the quality of replicates.
+
+# Significant OTU abundance changes
+
+It is possible to test if any OTU changes in abundance significantly. For small datasets as you are working on here, this may be interesting. For large datasets, e.g. from gut or soil microbiome, this may not very informative, but it still done frequently. This only makes sense when there are the _same_ OTUs in your samples. Again, this is the case here, but maybe not for environmental samples. 
+Since microbiome data has similar properties to transcriptome (RNASeq) datasets, this can be easily done via DESeq2. For more information see here http://joey711.github.io/phyloseq-extensions/extensions-index.html
+
+Convert the 24h Timepoint into a deseq2 object:
+
+```{r}
+des2_phyl_24h <- phyl_syncom_glommed %>%
+  subset_samples(Timepoint == "24h") %>% # This is filtered to be only 24h
+  phyloseq_to_deseq2(. , ~ sample_treatment + Rep) # Specify the variables.
+# Timepoint is actually useless since it is filtered for 24h, but maybe you need to create an object
+# that contains more than one timepoint later? Then, this could be useful.
+```
+
+Perform the comparison.
+DESeq function is a high-level quick-and-easy DESeq analysis with default parameters. We use the "Wald" test and perform parametric fitting.
+Then, the results function is used to extract the results from the DESeq object (DataSet) and compare BOA to DMSO. This is done via contrasts, where we first specify the column name (sample_treatment) and then the levels of the variable we want to retrieve fold changes for.
+
+```{r}
+des2_phyl_BOA <- des2_phyl_24h %>%
+  DESeq("Wald","parametric") %>%
+  results(contrast = c("sample_treatment", "BOA","DMSO")) # contrast specifies what should be tested.
+# Here, we test in the "sample_treatment" variable
+# The Foldchanges we get are for BOA/DMSO. 
+# Numerator first, denominator second
+```
+
+The next step is subsetting this table for significant results. Here we use alpha = 0.01, meaning that everything with an adjusted p-value below 0.01 is significant. We then add metadata for plotting.
+
+```{r}
+signif_tab_BOA = des2_phyl_BOA[which(des2_phyl_BOA$padj < 0.01), ] # Simple subsetting for those where p.adj < 0.01
+signif_tab_BOA = cbind(as(signif_tab_BOA, "data.frame"),
+                   as(tax_table(phyl_syncom_glommed %>%
+  subset_samples(Timepoint == "24h"))[rownames(signif_tab_BOA), ],
+  "matrix")) # Join to metadata
+
+# Look at this table, remove the rownames to check the table (=sequence, very long not informative)
+signif_tab_BOA %>%
+  remove_rownames()
+
+```
+
+## Tasks
+
+### Changes in BOA after 24h
+
+Plot the significant changes for the 24h timepoint.
+
+```{r}
+signif_tab_BOA %>% 
+  ggplot()
+```
+
+### Reproduce the analysis comparing APO and BOA.
+
+You will be asked to add code and plot in moodle.
+
+### Explore
+
+Changes for APO between 24 and 96h. Explore other changes. What do you find?
+
+# End of day 5
+
+Today you learned to create and carry out basic analysis with phyloseq objects. You should understand what agglomeration (tax_glom) and pruning (prune_taxa) do in this context. You also learned how to interface from phyloseq to DESeq2 and then use DESeq2 to identify significant differences in taxon abundances between treatments or timepoints. 
+
+Reflect on what you did today.
+
+# Clearer code for the DESeq2 part
+
+```{r cleaned version of DESeq2 steps}
+des2_phyl_24h <- phyl_syncom_pruned %>%
+  subset_samples(Timepoint == "24h") %>% # This is filtered to be only 24h
+  phyloseq_to_deseq2(. , ~ sample_treatment + Rep) # Specify the variables.
+# Timepoint is actually useless since it is filtered for 24h, but maybe you need to create an object
+# that contains more than one timepoint later? Then, this could be useful.
+
+des2_phyl_BOA <- des2_phyl_24h %>%
+  DESeq("Wald","parametric") %>%
+  results(contrast = c("sample_treatment", "BOA","DMSO")) %>%  # contrast specifies what should be tested.
+# Here, we test in the "sample_treatment" variable
+# The Foldchanges we get are for BOA/DMSO. 
+# Numerator first, denominator second
+  as.data.frame() ## Convert to df
+
+signif_tab_BOA <- des2_phyl_BOA %>% dplyr::filter(padj < 0.01)
+# Simple subsetting for those where p.adj < 0.01
+
+## extract the sample data for this timepoint
+metadata_24h <- tax_table(phyl_syncom_pruned %>%
+  subset_samples(Timepoint == "24h"))
+
+signif_tab_BOA <- cbind(signif_tab_BOA,
+                        metadata_24h_boa[rownames(signif_tab_BOA), ] %>% as(., "matrix"))
+
+# The [rownames(signif_tab_BOA),] is used to subset the metadata table to only those rows (=Sequences) that are found in signif_tab_BOA 
+
+# Look at this table, remove the rownames to check the table (=sequence, very long not informative)
+signif_tab_BOA %>%
+  remove_rownames()
+
+```
+
+
+```{r}
+phyl_syncom_pruned %>%
+  subset_samples(Timepoint == "24h") %>% 
+ subset_samples(Rep != "Rep_1") %>% 
+  tax_table()
+```
+

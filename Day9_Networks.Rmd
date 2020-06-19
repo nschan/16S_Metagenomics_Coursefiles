@@ -1,0 +1,549 @@
+---
+title: "Day 9: Network analysis"
+author: "Niklas Schandry"
+date: "April / May 2020"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+# Network analysis
+
+At this point, you have carried out most of the standard analysis that inform you about your sample. Today, we will deal with network analysis. Personally, my stance on network analysis is mixed, it can be powerful for specific situations, but often it is done for no good reason and often creates incredibly complex plots that are impossible to understand or interpret beyond very obvious conclusions that could have been drawn using simpler methods. I think doing the analysis is interesting and kind of entertaining, but again I urge you to be careful with your interpretation.
+Network theory has historically been used in quantitative social sciences, but has gained traction in biology as a way to deal with complex datasets. Since it is commonly used in microbiome papers, I think you should know how it works and what it means, so you can judge and interpret these displays. 
+
+You have probably seen networks in publications, they usually consist of dots (nodes or vertices) connected by lines (edges). Often, these networks are:
+
+ + Nice to look at (subjective)
+
+ + Confusing
+
+ + Not informative
+
+As for any analysis method, the general rule that just because you _can_ do something it is not necessarily a _good idea_ to do it applies. 
+You should understand networks primarily as a way to display your data. Some data are better suited for networks than other data. I should mention however, that networks come with their own set of metrics which can be used to compare different networks. Since there are only two things in networks, nodes and edges, these metrics often deal with describing how many edges are found per node, where the nodes are in the network (nodes in the center usually have more edges than nodes on the outside) if there are subnetworks, how the subnetworks are connected to larger networks etc. 
+
+
+# How to do networks
+
+Behind every network is a table. This table contains information on "points" (i prefer to call them nodes, also called vertices) and the lines connecting one node to another, these are called edges. Edges ususally have a property called "weight", often this is displayed as the line thickness. In theory, many types of data can be displayed in networks, and networks have some interesting properties, but these are beyond the scope of this course. 
+In microbiome analysis, you typically encounter sample or taxa networks. 
+Sample networks can be used to gain similar insights to what you can do with ordination or clustering, inform you which of your samples are similar and which are not similar.
+Taxa networks typically display "taxa", usually OTUs, as nodes The edges in these case illustrate the strength of correlation between two taxa. The idea is that this gives an overview which taxa in the experiment "interact". This interaction should be understood more as a statistical observation, than as a biological interaction. However, it may be helpful to formulate new hypothesis which strains interact, and then follow these up using experimental approaches to validate if these interactions are real.
+Networks can built from any kind of table, also from distance matrices.
+
+A technical clarification: The table does ususally _not_ contain information on the "position" of vertices in space, it only describes the strength of each edge. The layout of the network is typically determined algorithmically during plotting. 
+
+# Sample networks
+
+You can create a network that displays the distance between your samples. Similar to an ordination, this may be useful to visualize distances / identify similarities. Here, samples are vertices, and edges reflect the distance. To clarify again: the length of an edge has no meaning, the width is what is used to communicate the edge weight. The edge weight corresponds to the "distance value".
+Sample-level networks can be constructed and plotted via phyloseq::plot_net()
+Familiarize yourself with the syntax and arguments of this function.
+
+```{r}
+phyl_syncom_pruned %>%
+  plot_net() +
+  ggtitle("Bray curtis distances between samples")
+```
+
+Try to improve this
+
+```{r}
+phyl_syncom_pruned %>% plot_net(color = "sample_treatment",
+                               shape = "Timepoint") +
+  ggtitle("Bray curtis distances between samples")
+```
+
+This graph is probably still super confusing, decrease the distance cutoff and see if this helps
+
+```{r}
+phyl_syncom_pruned %>% plot_net(color = "sample_treatment",
+                               shape = "Timepoint",
+                               maxdist = 0.3) + # Experiment with maxdist until you "see something"
+  ggtitle("Bray curtis distances between samples")
+```
+
+Compare this to the results from ordinations and clustering on the last two days. Do these methods agree, which do you think is easier to interpret? 
+
+# OTU Networks
+
+Wether networks or ordination or clustering are more useful to look at your samples is probably personal preference to a degree. I think the power of networks in microbiome studies becomes more evident when looking at taxa. I mentioned above that social sciences use networks to understand societies. Similarily, we will use networks to shed light on the microbial communities at the level of individual members.
+
+Again, phyloseq provides a function:
+
+```{r}
+phyl_syncom_pruned %>%
+  subset_samples(Timepoint == "96h") %>%
+  subset_samples(sample_treatment == "APO") %>%
+  plot_net(type = "taxa", point_label = "Genus")
+```
+
+However, I think this is a bit inadequate for taxa networks. Below, you will learn how you can construct the necessary tables and plot the network using other tools.
+
+_Important disclaimer_ We will use "standard" correlation measures for the sake of demonstration, time and simplicity. You should be aware that this is not the optimal way to compute these correlations, because the OTU tables are sparse (contain many 0s). There are packages and commandline tools to deal with this (the sparcc package, spiec-easi, others). However, I found that at their current stage these packages are not very user friendly, but I anticipate that they will be developed further. To avoid confusing you more than necessary, we will construct networks using pearson correlations. Should you ever find yourself in a situation where you need to do this for your research, please use different methods, for example [spiec-easi](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004226). We will _not_ use spiec-easi, because it tends to require a lot of memory, and you are possibly sharing one physical node, which will be slow (all sessions will freeze, I tested this..) if you all try to use spiec-easi at the same time.
+
+## Network construction
+
+Below is a step-by-step procedure.
+First, we obtain the counts for each OTU, then we correlate OTUs within subsets of samples. 
+We then visualize the correlatoins. 
+In addition, you will work a bit with the network objects to create a visual comparison. Since this is an R course, you will be introduced into how this can be turned into a function. You generally are _not_ expected to write your own functions, but it is always good to have an idea. If you want to start writing functions, my main advice is to write very simple functions, and expand them by integrating them into larger functions. Generally, if you want to go deeper into R programming, you should familiarize yourself with testing and code versioning first.
+
+### Step 1: Get counts
+
+Easy via phyloseq_to_deseq2
+
+```{r}
+syn_96h <- phyl_syncom_pruned %>% 
+  subset_samples(Timepoint == "96h") %>% 
+  phyloseq_to_deseq2(~ sample_treatment) %>% 
+  DESeq() %>% 
+  counts() %>% 
+  as.data.frame() %>% 
+  rownames_to_column("Amplicon")
+
+## Add genus information
+syn_96h %<>%  left_join(phyl_syncom_pruned %>%    
+                tax_table() %>%
+                as.data.frame() %>%
+                rownames_to_column("Amplicon") %>%
+                dplyr::select(Amplicon, Genus), by = "Amplicon")  %>%
+  # Drop amplicon column
+  dplyr::select(-Amplicon) %>%
+  # Use genus as rownames
+  column_to_rownames("Genus")
+```
+
+This gives us a table where Genus is rows and Samples is columns
+
+```{r}
+syn_96h
+```
+
+We need to transpose this table. We also move the names into a column called "Sample"
+
+```{r}
+syn_96h %<>% 
+  t() %>% # t() transposes. Transposition is switching rows are columns (sort of like rotating the table 90°, but not really)
+  as.data.frame() %>% 
+  rownames_to_column("Sample") %>% 
+  mutate(Sample = str_replace(Sample, "\\.","_")) # This should have no effect, is a remnant from course development. Also does not break anything
+```
+
+
+```{r}
+syn_96h
+```
+
+We now split the sample column to recreate Treatment and replicate information. To do this, we split after each underscore ("_") character. This generates some useless columns, which are dropped using select.
+
+```{r}
+syn_96h %<>% 
+  separate(Sample, c("Syncom", "Treatment", "useless1", "useless2", "useless3", "Rep", "Timepoint"), sep ="_") %>% 
+  select(-starts_with("useless")) # Extremely elegant...
+```
+
+```{r}
+syn_96h
+```
+
+```{r}
+syn_96h_dmso <- syn_96h %>% filter(Treatment == "DMSO") %>% 
+  dplyr::select(-Syncom, -Treatment, -Timepoint, -Rep)
+syn_96h_dmso
+```
+
+```{r}
+syn_96h_apo <- syn_96h %>% filter(Treatment == "APO") %>% 
+  dplyr::select(-Syncom, -Treatment, -Timepoint, -Rep)
+syn_96h_apo
+```
+
+Sometimes, you have isolates that are only in one of your samples, I suggest you try to filter out anything that you in total find less than a 100 times across the 5 replicates
+
+```{r}
+syn_96h_dmso <- syn_96h_dmso[, colSums(syn_96h_dmso) > 99] # Very base R table subsetting
+syn_96h_apo <- syn_96h_apo[, colSums(syn_96h_apo) > 99] # Very base R table subsetting
+```
+
+### Step 2: Correlate and plot
+
+We make use of the corrr package (tidymodels), because it is the least painful.
+
+```{r}
+dmso_96h_corrs <- syn_96h_dmso %>% 
+  correlate()
+dmso_96h_corrs %>% 
+  network_plot()
+```
+
+This can be subset for only strong correlations, lets assume that everything above 0.6 is "strong"
+
+```{r}
+gg_dmso <- dmso_96h_corrs %>% 
+  network_plot(min_cor = 0.6)+
+  ggtitle("DMSO correlation network at 96h")
+gg_dmso
+```
+
+
+```{r}
+apo_96h_corrs <- syn_96h_apo %>% 
+  correlate() 
+gg_apo <- apo_96h_corrs %>% 
+  network_plot(min_cor = 0.6) +
+  ggtitle("APO correlation network at 96h")
+gg_apo
+```
+
+Using patchwork we can look at these side-by-side
+
+```{r}
+gg_dmso + gg_apo 
+```
+
+You can also get a nicely formatted table of correlations by doing something like this
+
+```{r}
+syn_96h_apo_corrs_long <- syn_96h_apo %>% 
+  correlate() %>% 
+  stretch() %>% 
+  na.omit()
+
+syn_96h_dmso_corrs_long <- syn_96h_dmso %>% 
+  correlate() %>% 
+  stretch() %>% 
+  na.omit()
+```
+
+### Advanced: Comparing networks
+
+This section shows you how you can sort of overlay two networks. I think it is pretty hard to visually compare two networks.
+First, I will walk you through this as a step-by-step procedure. I will then provide you a function that does these steps for you, so you can quickly overlay two networks.
+
+Step 1: Join the two datasets of interest.
+
+```{r}
+all_corrs <- full_join(syn_96h_apo_corrs_long,
+                       syn_96h_dmso_corrs_long,
+                       by = c("x", "y"), 
+                       suffix =c("_apo","_dmso"))
+```
+
+Step 2: Add information on the individual networks. This generates a corr_dmso and corr_apo column, that only contains the sign of the correlation.
+
+```{r}
+all_corrs %<>%
+  mutate(corr_apo = case_when(r_apo < 0 ~ "Negative",
+                              r_apo > 0 ~ "Positive",
+                              TRUE ~ "NA"),
+         corr_dmso = case_when(r_dmso < 0 ~ "Negative",
+                              r_dmso > 0 ~ "Positive",
+                              TRUE ~ "NA") )
+all_corrs
+```
+
+Compare those edge-sets and collect which are shared, differ in sign, or are unique for one. If you dont understand what this does, check the documentation for case_when.
+
+```{r}
+all_corrs %<>%  mutate(
+  edge = case_when(
+    corr_apo == corr_dmso ~ "No Change",
+    ((corr_apo == "Negative" & corr_dmso == "Positive") | (corr_apo == "Positive" && corr_dmso == "Negative")) ~ "Sign change",
+    (corr_dmso == "NA") & (corr_apo != "NA") ~ "APO Only",
+    (corr_dmso != "NA") & (corr_apo == "NA") ~ "DMSO Only",
+    TRUE ~ "check me" # This should not happen, all conditions are covered above. If i forgot one, it will be labeled "check me".
+  )) 
+all_corrs
+```
+
+Turn into a graph:
+
+```{r}
+all_corrs_graph <- all_corrs %>%
+  dplyr::select(x,y, edge) %>% 
+  graph_from_data_frame()
+```
+
+We now convert this graph back to a data.frame using fortify.
+You may think this is sort of weird since we just turned into into a graph. When we turned it into a graph, the nodes were placed. Now we convert it back, so we can use the ggnetwork package.
+
+```{r}
+all_corrs_graph %>%  
+  fortify %>% 
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_edges(aes(color = edge)) +
+  geom_nodes() +
+  geom_nodelabel_repel(aes(label = name)) +
+  theme_blank()
+```
+
+#### Function
+
+You have used many functions during the last 9 days. In R, basically everything that has () at the end is a function. Functions often need input (arguments), and in almost all cases produce some output. 
+
+The function below, will use two networks, and overlay them. This is done pretty much in the same way as it was done above in the comparing networks section. Writing a good function requires some considerations, the most obvious being the name. It should be descriptive and easy to remember, it also should not be a name used by something else.
+
+Below is slight abstraction of the code above into a function. I usually use package::function() notation when writing functions, to make them a bit more robust.
+
+You can imagine functions as running their own environment (called namespace), which is passed from the function arguments. If a function needs something that is not defined in the arguments, or the function itself, it will start looking around in "higher" namespaces. This can be the package namespace, if the function is part of a package. The package namespace would contain everything that is part of the package. Then, if the function does not find what it needs in the package namespace, it would probably check the "Global Environment" which is basically the current users namespace (the Environment panel). If it can't find what it needs, it will fail.
+The biggest pitfall when starting with functions is not understanding the namespaces, and using things from your global environment inside a function. This will work while you are in this environment, and will be a huge mess to figure out later on, when you switch to a new environment / workspace. Regular assignment (<- or =) within a function will only assign this within the functions namespace. However, if you parts your function code through the console for testing, everything will be done and assigned in the global environment.
+When you use package::function() you are explicitly telling R to look for this function in that packages namespace.
+
+It is _extremely bad_ practice to use global assignment in functions. Global assignments create (and overwrite existing) objects in the global environment. This should never ever be done. I will not explain how you could do this here to avoid encouraging you to try it.  
+
+```{r}
+overlay_corrnet <- function(network1 = NULL, 
+                            network2 = NULL,
+                            treat1 = "treat1",
+                            treat2 = "treat2",
+                            cutoff = 0.5 ) {
+  # These tables (network1, network2) should have been created using correlate() %>% stretch() %>% na.omit
+  # This function overlays two correlation tables. 
+  # This function also filters based on r value
+  # This function is very quick and dirty and not well documented.
+  # It is provided to the LMU Metagenomics course to streamline analysis.
+ 
+# Join the networks, filter for cutoff
+full_net <- full_join(network1 %>% dplyr::filter(abs(r) > cutoff),
+                       network2 %>% dplyr::filter(abs(r) > cutoff),
+                       by = c("x", "y"), 
+                       suffix =c("_1", "_2")) # This is much easier than trying to use the treat1 and treat2 vars here, also the vars are not helpful at this stage.
+
+# Determine sign
+full_net %<>%
+  dplyr::mutate(corr_1 =  dplyr::case_when(r_1 < 0 ~ "Negative",
+                            r_1 > 0 ~ "Positive",
+                            TRUE ~ "NA"),
+         corr_2 =  dplyr::case_when(r_2 < 0 ~ "Negative",
+                            r_2 > 0 ~ "Positive",
+                            TRUE ~ "NA") ) 
+
+# Determine if edges are shared / change in sign / are missing in one
+full_net %<>%   dplyr::mutate(
+  edge =  dplyr::case_when(
+    corr_1 == corr_2 ~ "No Change",
+    ((corr_1 == "Negative" & corr_2 == "Positive") | (corr_1 == "Positive" && corr_2 == "Negative")) ~ "Sign change",
+    (corr_2 == "NA") & (corr_1 != "NA") ~ paste(treat1, "Only"),
+    (corr_2 != "NA") & (corr_1 == "NA") ~ paste(treat2, "Only"),
+    TRUE ~ "check me"
+  )) 
+
+full_net <- full_net %>%
+  dplyr::select(x,y, edge) %>% 
+  igraph::graph_from_data_frame() %>% 
+  ggnetwork::fortify
+return(full_net)
+}
+```
+
+This function is also in /functions. You can use it either by running the code above or by using:
+```{r}
+source("functions/overlay_corrnet.R")
+```
+
+Function usage example:
+
+```{r}
+overlay_corrnet(
+  syn_96h_apo_corrs_long,
+  syn_96h_dmso_corrs_long,
+  "APO", "DMSO"
+) %>% # Produce plot. I like to keep this manual.
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_edges(aes(color = edge), curvature = 0.2) +
+  geom_nodes() +
+  geom_nodelabel_repel(aes(label = name)) +
+  theme_blank()
+```
+
+### More comprehensive function.
+
+We still need quite some pre-processing to get to these networks.
+To further streamline analysis, here is a function that does basically everything you did above.
+
+```{r}
+get_counts_and_overlay <- function(phyl = NULL, # Phyloseq object
+                                   treatvar = "sample_treatment", # Column that contains the treatments
+                                   # This is a default. You could also pass 
+                                   # get_counts_and_overlay(treatvar == "Timepoint") to split into Timepoints.
+                                   treat1 = NULL, # First treatment, no default
+                                   treat2 = NULL, # Second treatment, no default
+                                   OTUcol = "Genus", # Column that defines OTU
+                                   mincounts = 99, # Minimum total counts per treatment to retain OTU for correlations
+                                   mincorr = 0.5 # Correlation cutoff
+                                   ) {
+  if(is.null(phyl)){
+    stop("Phyloseq object missing")
+  } if(is.null(treat1) | is.null(treat2)){
+    stop("Treatment1 and / or treatment2 are missing") 
+    # Is this a good way to handle this?
+    # What could be improved?
+  }
+
+## Extract counts, by treatvar (reformulate will turn this into ~sample_treatment for the default value)
+counts <- phyl %>% 
+  phyloseq::phyloseq_to_deseq2(reformulate(treatvar)) %>% 
+  DESeq2::DESeq() %>% 
+  DESeq2::counts() %>% 
+  as.data.frame() %>% 
+  tibble::rownames_to_column("Amplicon")
+
+## Add genus information
+counts %<>%  dplyr::left_join(phyl %>%    
+                phyloseq::tax_table() %>%
+                as.data.frame() %>%
+                tibble::rownames_to_column("Amplicon") %>%
+                dplyr::select(Amplicon, eval(OTUcol)), # Use the value stored in the variable OTUcol, not the name OTUcol
+                by = "Amplicon")  %>%
+  # Drop amplicon column
+  dplyr::select(-Amplicon) %>%
+  # Use OTUcol as rownames
+  column_to_rownames(eval(OTUcol))
+
+
+counts %<>% 
+  t() %>% # t() transposes. Transposition is switching rows are columns (sort of like rotating the table 90°, but not really)
+  as.data.frame() %>% 
+  tibble::rownames_to_column("Sample") %>% 
+  dplyr::mutate(Sample = str_replace(Sample, "\\.","_")) # This should have no effect, is a remnant from course development. Also does not break anything
+
+## To make this function a bit more flexible regarding sample names, 
+## and not split into a fixed number of columns, we will simply assume that the treatment
+## is in the samplename, and if we can detect the treatment in a sample name,
+## we assume that this sample has received this treatment. 
+## Since we only care about two treatments, everything that does not match is marked "other"
+
+## We change this to do simpler subsetting
+
+counts %<>% dplyr::mutate(Treatment =
+                            case_when(stringr::str_detect(Sample, treat1) ~ paste(treat1), 
+                                      # Changed this so the treatment is detected from the sample name.
+                                      # Maybe sub-optimal in general, but fine for this course..
+                                      stringr::str_detect(Sample, treat2) ~ paste(treat2),
+                                      TRUE ~ "Other"))
+
+# Format network 1
+
+## Make matrix
+
+network1 <- counts %>%
+  dplyr::filter(Treatment == treat1) %>% 
+  dplyr::select(-Sample, -Treatment)
+
+## Filter matrix
+
+network1 <- network1[, colSums(network1) > mincounts] 
+
+## Correlate and make long
+
+network1 <- network1 %>% 
+  corrr::correlate() %>% 
+  corrr::stretch() %>% 
+  na.omit()
+
+# Format network2
+
+## Make matrix 
+network2 <- counts %>%
+  dplyr::filter(Treatment == treat2) %>% 
+  dplyr::select(-Sample, -Treatment)
+
+## Filter matrix
+
+network2 <- network2[, colSums(network2) > mincounts] 
+
+## Correlate and make long
+
+network2 <- network2 %>% 
+  corrr::correlate() %>% 
+  corrr::stretch() %>% 
+  na.omit()
+
+# Pass to overlay function, this returns the "overlayed" dataframe.
+
+overlay_corrnet(network1, network2, treat1 = treat1, treat2 = treat2, cutoff = mincorr)
+
+}
+```
+
+Test if this works.
+
+```{r}
+phyl_syncom_pruned %>% 
+  subset_samples(Timepoint == "96h") %>% 
+  get_counts_and_overlay(treat1 = "DMSO", treat2 = "APO") %>% 
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_edges(aes(color = edge), curvature = 0.2) +
+  geom_nodes() +
+  geom_nodelabel_repel(aes(label = name)) +
+  theme_blank()
+```
+
+Also available in functions
+
+```{r}
+source("functions/get_counts_and_overlay.R")
+```
+
+
+# [optional] Advanced networks analysis: igraph package
+
+This is beyond the scope of this course.
+
+The code below is largely included to give you an idea how you can use your correlations with [igraph](http://igraph.org/)
+igraph is very comprehensive and offers a lot of methods. This is intended as a reference in case you every need to use this type of analysis and need a quick start into igraph. You can use the igraph package for a range of different network analysis methods, however, we will not discuss graph theory and these measures in any detail.
+igraph also has it's own syntax, and brings some special operators.. some are used below.
+
+```{r}
+# Correlate
+graph_96h_dmso <- syn_96h_dmso %>% 
+  cor()
+graph_96h_apo <- syn_96h_apo %>% 
+  cor()
+# Arbitrary filter to only look at correlations > 0.5
+graph_96h_dmso[graph_96h_dmso < 0.5] <- 0
+graph_96h_apo[graph_96h_apo < 0.5] <- 0
+# Make into igroah
+ig_96h_dmso <- graph_96h_dmso %>%   graph_from_adjacency_matrix(diag = FALSE, weighted = "max")
+ig_96h_apo <- graph_96h_apo %>%   graph_from_adjacency_matrix(diag = FALSE, weighted = "max")
+```
+
+Plot the graph
+
+```{r}
+ig_96h_dmso %>% plot()
+```
+
+Check node betweenness (nodes with a high betweenness are more central in the graph).
+
+```{r}
+ig_96h_dmso %>% betweenness()
+```
+
+```{r}
+ig_96h_dmso %>% clusters()
+```
+
+```{r}
+ig_96h_dmso %>% components()
+```
+
+
+Union of the two graphs
+
+```{r}
+ig_96h_dmso %u% ig_96h_apo %>% plot
+```
+
+

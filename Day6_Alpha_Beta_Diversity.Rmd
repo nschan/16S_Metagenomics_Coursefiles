@@ -1,0 +1,168 @@
+---
+title: 'Day 6: Diversity measures'
+author: "Niklas Schandry"
+date: "April 2020"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+# About
+
+Today, you will perform standard analysis in (community) ecology.
+
+You will explore two kinds of diversity, alpha and beta diversity. Unfortunately the terms species diversity, species richness, etc have become blurred over time. I think it is more important that you understand the concept of a measure, than to be able to implement the calculation yourself. I will provide a short paragraph on each measure, you are encouraged to take a look at the formulas on your own.
+
+First, load the phyloseq objects for Silva and Syncom.
+
+```{r}
+phyl_silva <- read_rds("rds/phyl_silva.rds")
+phyl_silva_glommed <- tax_glom(phyl_silva,
+                 taxrank = "Genus",
+                 NArm =TRUE,
+                 bad_empty = c(NA, 
+                               "",
+                               " ",
+                               "\t",
+                               "Unknown_Family")
+                 )
+
+phyl_syncom <- read_rds("rds/phyl_syncom.rds")
+phyl_syncom_glommed <- tax_glom(phyl_syncom,
+                 taxrank = "Genus",
+                 NArm =TRUE,
+                 bad_empty = c(NA, 
+                               "",
+                               " ",
+                               "\t",
+                               "Unknown_Family")
+                 )
+
+```
+
+
+# Alpha-Diversity
+
+Alpha diversity, is any measure that describes *one* of your samples. Alpha diversity measures estimate the diversity of species, or the richness of species. The meaning of this index naturally depends on how this index was calculated. 
+
+You may be interested which of your samples has more different species (= _"Observed"_ in phyloseq). However, you may then realize that this is not super informative for various reasons, and you might actually like to incorporate not only the number of different species, but also how many individuals you find per species. 
+
+This is incorporated by the _"Shannon"_ diversity. This index incorporates information on the number of species and the individuals per species. It reaches its maximum when each species has the same abundance (this is related to the concept of "evenness").
+
+The _"Simpson"_ index simply divides the number of individuals for a single species by the total number of individuals and this is summed up for all species. If there is only one species (no diversity), Simpsons index becomes 1. Often, the simpson index is inverted (1/Simpson), so that a lower number corresponds to low diversity, this is done by the _"InvSimpson"_ measure.
+
+_"Fisher"_ makes use of a log-series to estimate alpha-diversity. The core assumption is that there are more rare species than high-abundance species. You can read more about this at the ?fisherfit help page.
+
+_"Chao1"_ estimates diversity by relying information on rare species (singletons and doubletons (single observations, or observed twice)). The idea is that sampling is non-exhaustive by nature and every time we sample we miss something, we try to incorporate what we have missed into the diversity measure. 
+
+_"ACE"_ (abundance-based coverage estimator) also incorporates information rare species, but these are more flexibly defined that just singletons and doubletons and instead makes use of a threshold for rare.  
+
+## Estimating alpha diversity
+
+For phyloseq objects, alpha diversity can be calculated using estimate_richness().
+Phyloseq also provides an easy way to calculate & plot alpha-diversity via plot_richness()
+
+Estimate the Shannon diversity in your samples.
+
+```{r}
+phyl_syncom_glommed %>%
+  estimate_richness(measures = "Shannon")
+```
+
+Plot the Shannon diversity
+
+```{r}
+phyl_syncom_glommed %>%
+  plot_richness(measures = "Shannon")
+```
+
+The plot_richness plot is a ggplot. You can customize it by adding layers with "+"
+
+```{r}
+phyl_syncom_glommed %>% 
+  plot_richness(measures = "Shannon") +
+  ggtitle("My plot of Shannon diversity")
+```
+
+## Task:
+
++ Plot all alpha diversity measures for your samples.
+
++ Plot all alpha diversity measures for pruned samples. Explain the observed changes.
+
+```{r}
+phyl_syncom_pruned <- prune_taxa(c(taxa_sums(phyl_silva_glommed) > 100), 
+                         ###Adjust minimum counts required to retain taxon.These are sums accross all experiments.
+                   phyl_silva_glommed)
+```
+
+
++ Using two alpha diversity measures of your choice (not the Simpson & InvSimpson combination) Investigate how alpha diversity changes: Within each treatment, over time *and* within each timepoint by treatment. Interpret the results, discuss the differences caused by changing the alpha diversity measure
+
+# Beta diversity
+
+Alpha diversity is interesting, as it informs us about what is going on within each sample (or group) we have.
+But, we might be more interested in differences between two samples. The difference between two samples is measured by the beta diversity. As a reminder: alpha diversity describes the diversity within one sample, beta diversity quantifies differences between samples. Since the beta-diversity describes how distant (far apart, different) these samples are in a high-dimensional space, the function that estimates beta-diversity is named distance.
+
+_Practical tip_: use phyloseq::distance in your code to make explicit that you want to use the distance function from the phyloseq package. If you see a message like 'unable to find an inherited method for function ‘distance’ for signature ‘"phyloseq", "character"' this is because R tried to use the base R function distance on a phyloseq object, which base R does not know how to handle.
+
+There are many ß-diversity estimators available. They can be looked at using
+
+```{r}
+?distanceMethodList 
+```
+
+This also provides the math behind each distance method.
+
+We will use Bray-Curtis (not strictly a distance but a dissimilarity) for starters. Basically, Bray-Curtis is the difference in number of counts between two sites or samples, divided by the sum of counts per species across both sites. Naturally, if the difference is 0 (exactly the same number of counts) the dissimilarity is also 0. 
+
+```{r}
+phyl_syncom_pruned %>% 
+  phyloseq::distance(method = "bray") # Bray curtis
+```
+
+## Unifrac distances
+
+The Unifrac distances are a little different from the distances discussed so far, which are only based on species numbers (or presence-absence). Unifrac incorporates phylogenetic information into the distance measure. This is interesting for naturally occuring communities, as it will put communities made up from different isolates / species of the same phylogenetic group closer together, even if the species are different. In microbiology, overall phylogeny is sometimes more useful than precise species (taxon) assignments.
+Unifrac is based on the presence / absence of branches in the phylogenetic tree. _"unifrac"_ is the ratio of unshared branches (between two samples), to all branches in the tree. The weighted variant _"wunifrac"_ assigns a weight to each branch based on the abundance of that taxon. This makes weighted unifrac quite useful for the data you have, where you might expect that the abundance of specific taxa changes between treatments, but the taxa do not change.
+
+### Task
+
+Calculate and plot weighted and unweighted unifrac distances for your data.
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+# Tasks
+
+1. Explain the difference between alpha and beta diversity.
+
+2. Does pruning affect alpha diversity?
+
+3. Does pruning affect beta diversity?
+
+4. Discuss the different beta diversity measures in the context of the experiment. (Pro / Con, brief)
+
+
+# End of day 6
+
+Today, you learned how to analyze alpha and beta diversity using phyloseq. You should have an understanding of the difference between alpha and beta diversity, and you should be aware that there different measures for ecological diversity. You should have a mental concept of distances in statistics.
+
+Reflect on what you did today.
+

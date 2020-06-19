@@ -1,0 +1,171 @@
+---
+title: 'Day 8: Distances II: Statistics'
+author: "Niklas Schandry"
+date: "April 2020"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+# Day 8
+
+Today, as week two of the course ends, you will learn how to test if one of your variables has a significant influence on the distance between your samples. Mentally, this should be grouped with ordination methods and clustering, since these methods also deal with distance matrices. 
+
+# Formulas in R
+
+Modelling R functions often make use of formulas. Formulas in R are a way to write down what you would like to test. Typically, they are written in the form of 
+
+```{r, eval =F }
+y ~ x
+```
+
+Which means you want to model y based on x. y is your dependent variable (what you measure), x is your independent variable (what you did, e.g. treatment, or other "meta" information, such as timepoint). I prefer to think of this as "model y by x".
+There are some basic operators for formulas, some are specific for some packages. The most basic one is "+"
+
+```{r, eval = F}
+y ~ x + b
+```
+
+Meaning that you model (=estimate) both the influence of x and the influence of b on y.
+
+However, sometimes it is useful to also figure out how x _interacts_ with b to change y. This is done using the ":" operator.
+
+```{r, eval = F}
+y ~ x:b
+```
+
+Constructs the interaction between x and b. This basically means that you take all combinations of x and b and estimate their influence. Often, it is important to check each of x and b individually (+) and their interaction (:). This is done using "*"
+
+```{r, eval =F}
+y ~ x * b
+## The same as
+y ~ x + x:b + b
+```
+
+# Permutation tests
+
+Again, we here work with distance matrices. Permutation tests are the current method of choice to test which of the variables have a significant influence. Permutation tests are considered non-parametric, because they make no assumptions about the shape of the underlying distribution. Instead, this distribution is approximated using permutations of the original population. A permutation simply means that samples are randomly assigned to groups. This is done many times, and each time a test is done on the influence of the variable of interest. Then, the actual sampling test statistic is compared to the average of the permuted statistics. This is conceptually similar to bootstrapping, where a population is repeatedly sampled with replacement to estimate the true distribution.
+
+## Variance tests
+
+Permutational tests of variance can be done with ANOSIM, or ADONIS (equivalent to PERMANOVA) methods. Conceptually these are similar to analysis of variance (ANOVA), but the distribution is estimated by permutations.
+
+To use the adonis test on a phyloseq object, you need to create the distance matrix via phyloseq::distance and turn the sample_data information from the phyloseq object into a dataframe.
+
+```{r}
+phyl_dist_bray <- phyl_syncom_pruned %>%
+  phyloseq::distance("bray")
+phyl_sampdat <- as(sample_data(phyl_syncom_pruned), "data.frame")
+```
+
+Then you can analyze the distance matrix using the metadata stored columns from the sample_data table.
+
+Test for a treatment effect
+
+```{r}
+vegan::adonis(phyl_dist_bray ~ sample_treatment, phyl_sampdat)
+```
+
+Task:
+
+Test for time
+
+```{r}
+
+```
+
+Test for interaction between time and treatment (include the time and treatment as normal variables too)
+
+```{r}
+
+```
+
+Test for replication.
+
+```{r}
+
+```
+
+Test for replication interaction with treatment
+
+```{r}
+
+```
+
+Perform constrained ordination (see day 7) for the significant independent variables (predictors) and plot the results.
+If you have no significant independent variables, use the Treatment variable.
+
+```{r}
+
+```
+
+## Mantel test
+
+The mantel test is used for comparing (correlating) _two_ distance matrices. The mantel test compares two matrices (you could imagine two timepoints, where you made one distance matrix for each). This is different from variance methods, since it correlates each cell to the corresponding cell in the other table. In the implementation in vegan (which phyloseq builds on), the significance is assessed using permutations of the first table.
+
+So, lets use the mantel test to check if there are any significant differences between timepoints.
+
+First, we generate distance matrices for each timepoint
+
+```{r}
+bray_24h <- phyl_syncom_pruned %>% 
+  subset_samples(Timepoint == "24h") %>% 
+  phyloseq::distance("bray")
+
+bray_48h <- phyl_syncom_pruned %>% 
+  subset_samples(Timepoint == "48h") %>% 
+  phyloseq::distance("bray")
+
+bray_72h <- phyl_syncom_pruned %>% 
+  subset_samples(Timepoint == "72h") %>% 
+  phyloseq::distance("bray")
+
+bray_96h <- phyl_syncom_pruned %>% 
+  subset_samples(Timepoint == "72h") %>% 
+  phyloseq::distance("bray")
+```
+
+Then, two timepoints can be compared using the mantel test as implemented in the vegan package. 
+_Note:_ The implementation in the ape package (ape::mantel.test()) does not seem to work with the distance matrices produced by phyloseq::distance
+
+```{r}
+vegan::mantel(bray_24h,bray_48h)
+```
+
+# Task
+
+Test all combinations of timepoints, identify over which timescales significant changes occur. E.g. test 24h vs 48h and 24h vs 72h, what do you observe? Also all 24h intervals (48h vs 72h, 72h vs 96h).
+
+```{r}
+
+```
+
+
+Try to understand the dynamics.
+
+Do the mantel tests agree with the "adonis" test results? What is the difference between the two approaches?
+
+# End of day 8
+
+Today, you have learned a bit about the R formula interface. You have also learned what permutation tests are, maybe understood why they are different from parametric tests such as ANOVA. You have carried out PERMANOVA and the mantel test, and you should be able to roughly explain how they differ.
+
+# End of week 2
+
+Today marks the end of week 2. Week 1 dealt largely with technical aspects and focused on how to actually begin the analysis by getting data in a useable format. During week 2, I hope you have learned the basics of microbiome data analysis, have an idea of diversity measures, understand the concepts of clustering and ordination and, with? today, you are basically equipped to perform the analysis that are typically carried out for microbiome studies.
+
+# Outlook for week 3
+
+In week three, you will learn about one more set of methods (network analysis). A large portion of week three will be independent data analysis. For days 10 and 11 you will receive no material from me. You are expected to analyze one, or more, syncom in depth during these days. I will provide you with the data you need to create a phyloseq object containing the full dataset, for you to work with.
+Week 3 will culminate in a report, where you should explain what you consider _key findings_ of your analysis.
+
+Reflect on what you did today and during week 2. 

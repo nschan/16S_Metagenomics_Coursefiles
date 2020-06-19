@@ -1,0 +1,185 @@
+---
+title: 'Day 7: Distances I: Ordination & Clustering'
+author: "Niklas Schandry"
+date: "April 2020"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+# About
+
+Today might be a huge spike in confusion as we now start with going deeper into data. Some methods you will learn from here on are basically the bread & butter of data-science and understanding the concepts will be tremendously helpful for any type of data-oriented tasks you will face in the future. Especially in high throughput data-driven sub-disciplines of biology these methods are de-facto standards, and it is worth investing time into understanding them. 
+
+You will dive into multivariate analysis. Multivariate analysis is used for datasets that have more than one variable, in this case these can be: 
+
+* Taxon abundances (raw)
+
+* Distances to other samples (derived from taxa)
+
+I think it is important to understand the difference between the two:
+
+Taxon abundance is one table that lists the different taxa for each of your samples.
+
+Distance table is one table that only contains the pairwise distances between each of your sample-pairings.
+
+You will carry out analysis to explore what happens in your communities at large. 
+
+Clustering and Ordination methods have similar goals, using different approaches. The main idea is to visualize which of your samples are close, meaning similar, to each other. 
+
+## Clustering
+
+Conceptually, clustering methods create clusters of "similar things". This is done by grouping samples based on similarities. I will briefly explain two commonly used clustering methods below.
+
+ * The k-means clustering method, will create "k" clusters. Simplified, this is carried out by randomly defining a center for each cluster and then assigning each sample to the cluster that it is closest to. This generates k clusters that contain samples. For k-means, you need to define the number of clusters you want (k), which is not always trivial. In addition, you should be aware that clustering methods will _always_ produce clusters. It is your job as a scientist to interpret and judge if your clustering makes any sense.
+ 
+ *  Hierarchical clustering. You group the two samples that are closest into one cluster. Then you create more clusters of similar samples. You then group the two most similar clusters into a new cluster (at a higher level, hierarchy). You continue this and you will get a _tree_ (dendrogram). A more complex variant of this is also what is done when you calculate a phylogenetic tree (day 4). Probably without realizing, you created a distance matrix of your sequences by first aligning them and then calculating the pairwise similarity (using e.g. a BLOSSOM matrix for proteins, or the Jukes-Cantor (JC69) model, that assumes equal probabilities for each base exchange). This generates a distance matrix. Then this matrix is clustered, using maximum likelihood methods, using an explicit model. You used the GTR model, general time reversible, that defines assumptions regarding probabilities of different mutations occurring and reverting. The result is a phylogenetic tree. Basically, you performed a really complex assessment of how similar the DNA sequences are, using some assumptions about their evolution and then put the most similar ones next to each other.
+
+This is the tree for your samples, as a reminder and an example of a hierarchical clustering.
+ 
+```{r}
+phyl_syncom_pruned %>% plot_tree()
+```
+
+## Ordination
+
+Ordination methods do also group "things" by similarity, but using a different concept. I will explain the idea here, again, math is not the point of this course. 
+Think of a distance matrix containing pair-wise distances for all samples, you can imagine this as points in a high-dimensional space: each sample is one axis (vector) and all other samples are at a certain point on this axis, defined by the distance. 
+I explained this during the lecture today, here is a link to a github repository that contains some files I made to explain this:
+https://github.com/nschan/PCA_Visual
+
+Ordination methods try to find a reduced set of dimensions (axis) that explain most of the variance in the high-dimensional space. For me, the best way to visualize this is: you have a cloud of points in 3D space. You then take a flashlight and shine it on this cloud and you observe the 2-D shadow (= projection). Then you move around the cloud of points until you see the projection that captures most of the variance.
+Usually, you cannot capture the complete variance on two orthogonal axis. For this reason, most ordination methods produce more than 2 axis. It is important to know how much variance is explained by the principal components (= the axis or coordinates), convention is to add this value to the axis label. Commonly used tools to explore the output of an ordination are _scree-plots_. These are simple barplots, that show the % of variance explained for each of the components. It is often observed that the first couple of axis explain a large proportion of the total variance. It is sometimes worth exploring axis 3, 4 or even 5, to see if anything interesting happens.
+A notable exception is NMDS which only produces as many axis as requested by the user. 
+ 
+For ordination there are two important choices you make:
+
+ * The distance measure. How you measure distances defines where your samples are in the high-dimensional space and how they are arranged.
+ 
+ * The ordination methods. Different ordination methods have different assumptions. Some methods perform very general purpose ordinations (offer no additional parameters). However, some ordination methods allow you to constrain your analysis within a certain variable. This means that you will carry out ordination *only for the variance explained by that variable*. This might be especially helpful when you know which variables have a strong influence. We will look into this tomorrow because I think this is complex enough for one day.
+
+# Ordination
+
+I mentioned before, that bray-curtis is not a distance, but a dissimilarity. This definition is mathematical; distances are euclidean, meaning that geometry works. Dissimilarities are not euclidean. If your distance matrix is euclidean you can use Principal Component Analysis (PCA), for non-euclidean you should use e.g. Principal Coordinate Analysis (= PCoA or also called MDS) or non-metric multidimensional scaling (NMDS). There are many ordinations methods available through the phyloseq::ordinate() functions. Methods that work for non-euclidean are often also suited for euclidean distances. 
+
+## Constrained ordination
+
+Some ordinations are "constrained", such as constrained correspondence analysis (CCA). In these methods, you only look at a subset of the variance in your experiment. This is done by providing a variable (e.g. treatment, usually from the metadata table). Then, the ordination is only done on the variance that is explained by this variable. It makes sense to combine this with testing for variables that have a significant influence, and then ordinating within the significant ones. We will look into this on Day 8.
+
+## MDS of bray-curtis dissimilarities
+
+The phyloseq ordinate function does both, computation of the distance matrix, via the _distance_ argument, and the ordination, specified via _method_.
+
+Below, the bray-curtis dissimilarity is calculated, then ordination is done via Principal Coordinate analysis
+
+```{r}
+syncom_bray_mds <- ordinate(phyl_syncom_pruned, method = "MDS", distance = "bray")
+```
+
+Explore how much variance is explained by the coordinates.
+
+```{r}
+plot_scree(syncom_bray_mds, "Scree plot of MDS on bray-curtis dissimilarities")
+```
+
+Plot the ordination. To plot this you need to provide the ordination result, and the original phyloseq object.
+
+```{r}
+plot_ordination(phyl_syncom_pruned, syncom_bray_mds)
+```
+
+This plot is not very informative because it has basically no labels or annotations.
+The plot_ordination function allows you to specify these aesthetics, look at the help page for plot_ordination for details.
+The variable names here need to be *quoted* (= provided as strings), unlike for ggplot, where you can simply put the name without quotes.
+ 
+```{r}
+plot_ordination(phyl_syncom_pruned, syncom_bray_mds, color = "sample_treatment", label = "Timepoint")
+```
+
+The plot_ordination() function creates a ggplot() object. You can add layers or themes and titles to this. 
+
+```{r}
+plot_ordination(phyl_syncom_pruned, syncom_bray_mds, color = "sample_treatment", label = "Timepoint") +
+  ggtitle("MDS of Bray curtis distances")
+```
+
+Compare this to a hierarchical clustering of the bray-curtis dissimilarities
+
+```{r}
+phyl_syncom_pruned %>% 
+  phyloseq::distance("bray") %>% 
+  hclust() %>% 
+  plot()
+```
+
+_Note_: Should your plot be unreadable because the tip-labels are very lengthy, you can do something like this to truncate them.
+
+```{r}
+dist_bray <- phyloseq::distance(phyl_syncom_pruned, "bray")
+attr(dist_bray, "Labels") <- attr(dist_bray, "Labels") %>%
+  str_trunc(16) # Change this number to the number of letters you want to keep (first N letters)
+dist_bray %>% 
+  hclust %>%
+  plot
+```
+
+## Understanding what drives ordination results
+
+When you do ordination, you perform eigenvector decomposition of the co-variance matrix of your e.g. distance matrix.
+
+To rephrase the above explanations, when you ordinate your samples you basically attempt to find axis (vectors) in your table that explain most of the variance you observe in the variables you have measured (response variable). In this case you measured counts of bacterial taxa, and we assume that these here can be resolved into different genera. This allows you to quite easily assess which, if any, of your predictor variables (the ones that you define but do not necessarily measure, e.g. treatement) leads to a strong separation along the main variance components of your dataset. However, these components are derived from measured data, and it might be quite interesting to actually see if one of your principal components corresponds to one, or a combination of, your initial measured variables.
+
+In the language of ordinations, the original response variables are called "loadings". Basically, we will now project the loadings back onto the principal component space.
+
+For simplicity, and to save you going deep into dissecting ordination objects, we will use the biplot functionality of the plot ordination function. We will use Double PCoA but the approach works for other ordination methods as well (see here https://pubmed.ncbi.nlm.nih.gov/22174277/).
+
+Set up ordination
+
+```{r}
+phyl_syncom_dpcoa <- ordinate(phyl_syncom_pruned, "DPCoA") 
+```
+
+Look at the projection of samples
+
+```{r}
+plot_ordination(phyl_syncom_pruned, phyl_syncom_dpcoa, color = "sample_treatment")
+```
+
+Produce the biplot using (type = "split")
+
+```{r}
+plot_ordination(phyl_syncom_pruned, phyl_syncom_dpcoa, color = "Genus", type = "split")
+```
+
+Look at the different genera you have in your dataset in the above plot. They will separate along the two axis of the DPCoA. You can imagine their position at the vector endpoint showing their ~relative contribution to this component (probably not completely correct, but close enough to interpret the plot).
+What do you observe? Does one of your axis correspond to a single, or group of genera in your data?
+
+## Task 1
+
+Based on the two plots (ordination and hclust) above, discuss your observations. Do the methods agree, or are there strong differences? Which do you think is easier to understand visually?
+
+## Task 2
+
+On your own, explore the effect of different combinations of distance and ordinations on your samples. Feel free to explore the effect of constraints, but we will discuss this again tomorrow so it is not necessary today.
+
+Make use of scree-plots to understand how your different ordinations perform. Produce plots that are clear and visually appealing. Interpret the results, regarding the influence of treatment and time. 
+
+## Task 3
+
+Make use of biplots to understand which of the genera in your dataset drive the separation of your samples.
+
+# End of day 7
+
+Today, you used your newly acquired skills in creating distance matrices from day 6 to gain insights into how the samples within your dataset are related to each other. You should have a general understanding of the _point_ of clustering and ordination methods, why you do it, and which conclusions you can draw from these types of analysis. By now, you may also have developed preferences for different visualizations. Take a minute to think about what key differences between good and bad visualizations are. Visualizations are important for you to understand what you are doing and even more so to communicate with other people about your data. 
+
+Reflect on what you did today.

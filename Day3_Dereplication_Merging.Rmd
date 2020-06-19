@@ -1,0 +1,162 @@
+---
+title: "Day 3: Dereplication, Denoising and Merging "
+author: "Niklas Schandry"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    fig_height: 9
+    fig_width: 16
+    highlight: haddock
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+
+# About
+
+Today, you will continue to work on your reads to make sure that they contain as little errors as possible and merge them into amplicons.
+
+## Error rate estimation
+
+The error rate. This is a purely technical issue.
+PCR reactions and sequencing reactions produce mistakes (errors) at a certain rate. To account for errors in basecalling, dada2 has a feature that estimates the rate of transitions between different bases during sequencing. This is learnt from the dataset of interest.
+
+```{r}
+errF <- learnErrors(filtFs %$% path, multithread = TRUE, nbases = 5e8, randomize = TRUE)
+write_rds(errF, paste0(top_path, "errF.rds"))
+errR <- learnErrors(filtRs%$% path, multithread = TRUE, nbases = 5e8, randomize = TRUE)
+write_rds(errR, paste0(top_path, "errR.rds"))
+```
+
+# Dereplication and Sample inference
+
+## Dereplication
+
+What is dereplication?
+Consult documentation of derepFastq()
+Why are we doing this now and not later?
+
+
+```{r}
+sample_names <- paste0(SynCom_Samples$sample_description,
+                       "_",
+                       SynCom_Samples$sample_comments %>%
+                                str_replace(" ", "_")
+                       )
+
+derep_Fs <- derepFastq(filtFs$path, verbose=TRUE)
+derep_Rs <- derepFastq(filtRs$path, verbose=TRUE)
+
+names(derep_Fs) <- sample_names
+names(derep_Rs) <- sample_names
+``` 
+
+## Task: Explain dereplication in your own words.
+
+
+## Denoising
+
+You are expected to understand what denoising is in the context of this algorithm. If you do not, check the methods paper https://www.nature.com/articles/nmeth.3869
+
+## Task: Explain denoising in your own words.
+
+
+### Forward reads
+
+Do sample inference for the forward reads
+
+```{r}
+dada_Fs <- dada(derep_Fs,
+               err=errF,
+               multithread=TRUE)
+```
+
+### Reverse reads
+
+Do the sample inference for reverse reads (you need to change the code below).
+
+```{r}
+dada_Rs <- NULL
+```
+
+Explore the results
+
+```{r}
+dada_Fs[[1]]
+dada_Rs[[1]]
+```
+  
+## Read merging
+
+Understand what this is, how it is done, and why you need it.
+
+```{r}
+merged_reads <- mergePairs(dada_Fs,
+                           derep_Fs,
+                           dada_Rs,
+                           derep_Rs)
+```
+
+Inspect your merged reads.
+
+```{r}
+merged_reads[[1]] %>% head()
+```
+
+Did you obtain any merged reads? If not, what could be the reasons?
+If you do not have any merged reads, refine your trimming.
+
+## Task: Explain read merging in your own words
+
+## Construct a sequence table
+
+```{r}
+seq_table <- makeSequenceTable(merged_reads)
+```
+
+### Remove chimeric reads
+
+Understand: what is a chimeric read, why does it need to be removed?
+
+```{r}
+seq_table_no_chim <- removeBimeraDenovo(seq_table, multithread = TRUE)
+write_rds(seq_table_no_chim, "rds/seq_table_no_chim.rds") # Save this
+```
+
+## Task: Explain what a chimeric read is in your own words
+
+## Task: Check the fate of reads
+
+You should check how your reads are doing over the course of the analysis. If you lose a substantial amount at any point, reconsider your parameters.
+
+Understand the code below:
+What does getN do? You may need to consult the documentation for dada2::getUniques
+How does sapply work? 
+What are the contents of the track object? Explain the output you get.
+
+```{r}
+getN <- function(x) {
+ sum(getUniques(x)) 
+} 
+
+
+dada_track <- cbind(filter_output,
+               sapply(dada_Fs, getN), 
+               sapply(dada_Rs, getN),
+               sapply(merged_reads, getN),
+               rowSums(seq_table_no_chim))
+
+colnames(dada_track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
+rownames(dada_track) <- sample_names
+dada_track
+```
+
+# End of day 3
+
+Today, you have dereplicated and denoised the reads, carried out read merging and you removed chimeric reads from your samples. You should be able to understand the preceding sentence and be able to briefly explain dereplication, denoising, merging and what chimeric reads are and why they should be removed.
+
+Reflect on what you did today.
