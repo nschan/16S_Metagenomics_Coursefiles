@@ -142,6 +142,68 @@ _Note:_ The implementation in the ape package (ape::mantel.test()) does not seem
 vegan::mantel(bray_24h,bray_48h)
 ```
 
+More useful mantel test would be this:
+
+```{r}
+# Sample distances based on bray-curtis
+bray_dist <- phyl_syncom_pruned %>% 
+  phyloseq::distance("bray")
+
+# Sample distances based on timepoint
+
+time_dist <- metadata %>%
+  as.data.frame(stringsAsFactors = FALSE) %>% 
+  dplyr::select(Timepoint, sample_treatment, sample_name) %>%
+    mutate(Timepoint = str_extract(Timepoint, "[0-9]+") %>% as.numeric() ,
+         Timepoint = Timepoint / 24) %>% 
+  column_to_rownames("sample_name") %>% 
+  dist()
+
+# Sample distances based on treatment
+
+treat_dist <- metadata %>%
+  as.data.frame(stringsAsFactors = FALSE) %>% 
+  dplyr::select(sample_treatment, sample_name) %>%
+  mutate(sample_treatment = as.factor(sample_treatment) %>% as.numeric()) %>% 
+  column_to_rownames("sample_name") %>% 
+  dist()
+
+# Sample distances based on both time and treatment
+
+timetreat_dist <- metadata %>%
+  as.data.frame(stringsAsFactors = FALSE) %>% 
+  dplyr::select(Timepoint, sample_treatment, sample_name) %>%
+  mutate(Timepoint = str_extract(Timepoint, "[0-9]+") %>% as.numeric() ,
+         Timepoint = Timepoint / 24,
+         sample_treatment = as.factor(sample_treatment) %>% as.numeric()) %>% 
+  column_to_rownames("sample_name") %>% 
+  dist()
+
+vegan::mantel(bray_dist, time_dist)     
+vegan::mantel(bray_dist, treat_dist)     
+vegan::mantel(bray_dist, timetreat_dist)     
+```
+
+Or this:
+
+
+```{r}
+treat_dist_24h <- metadata %>%
+  as.data.frame(stringsAsFactors = FALSE) %>% 
+  filter(Timepoint == "24h")
+  dplyr::select(sample_treatment, sample_name) %>%
+  mutate(sample_treatment = as.factor(sample_treatment) %>% as.numeric()) %>% 
+  column_to_rownames("sample_name") %>% 
+  dist()
+bray_24h <- phyl_syncom_pruned %>% 
+  subset_samples(Timepoint == "24h") %>% 
+  phyloseq::distance("bray")
+
+vegan::mantel(bray_24h, treat_dist_24h)
+```
+
+
+
 # Task
 
 Test all combinations of timepoints, identify over which timescales significant changes occur. E.g. test 24h vs 48h and 24h vs 72h, what do you observe? Also all 24h intervals (48h vs 72h, 72h vs 96h).

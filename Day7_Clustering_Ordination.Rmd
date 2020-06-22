@@ -106,7 +106,7 @@ The variable names here need to be *quoted* (= provided as strings), unlike for 
 plot_ordination(phyl_syncom_pruned, syncom_bray_mds, color = "sample_treatment", label = "Timepoint")
 ```
 
-The plot_ordination() function creates a ggplot() object. You can add layers or themes and titles to this. 
+The plot_ordination() function creates a ggplot() object. You can add layers or themes and titles to this. This extends to facets, via facet_wrap() and facet_grid().
 
 ```{r}
 plot_ordination(phyl_syncom_pruned, syncom_bray_mds, color = "sample_treatment", label = "Timepoint") +
