@@ -53,7 +53,7 @@ Familiarize yourself with the syntax and arguments of this function.
 ```{r}
 phyl_syncom_pruned %>%
   plot_net() +
-  ggtitle("Bray curtis distances between samples")
+  ggtitle("Bray curtis dissimilarity between samples")
 ```
 
 Try to improve this
@@ -61,7 +61,7 @@ Try to improve this
 ```{r}
 phyl_syncom_pruned %>% plot_net(color = "sample_treatment",
                                shape = "Timepoint") +
-  ggtitle("Bray curtis distances between samples")
+  ggtitle("Bray curtis dissimilarity between samples")
 ```
 
 This graph is probably still super confusing, decrease the distance cutoff and see if this helps
@@ -70,7 +70,7 @@ This graph is probably still super confusing, decrease the distance cutoff and s
 phyl_syncom_pruned %>% plot_net(color = "sample_treatment",
                                shape = "Timepoint",
                                maxdist = 0.3) + # Experiment with maxdist until you "see something"
-  ggtitle("Bray curtis distances between samples")
+  ggtitle("Bray curtis dissimilarity between samples", subtitle ="only showing those that are below 0.3")
 ```
 
 Compare this to the results from ordinations and clustering on the last two days. Do these methods agree, which do you think is easier to interpret? 
@@ -115,6 +115,7 @@ syn_96h <- phyl_syncom_pruned %>%
 ## Add genus information
 syn_96h %<>%  left_join(phyl_syncom_pruned %>%    
                 tax_table() %>%
+                as(.,"matrix") %>% 
                 as.data.frame() %>%
                 rownames_to_column("Amplicon") %>%
                 dplyr::select(Amplicon, Genus), by = "Amplicon")  %>%
@@ -169,7 +170,7 @@ syn_96h_apo <- syn_96h %>% filter(Treatment == "APO") %>%
 syn_96h_apo
 ```
 
-Sometimes, you have isolates that are only in one of your samples, I suggest you try to filter out anything that you in total find less than a 100 times across the 5 replicates
+Sometimes, you have isolates that are only in one of your samples, I suggest you try to filter out anything that you in total find less than a 100 times across the 5 replicates, this is basically what prune_taxa does.
 
 ```{r}
 syn_96h_dmso <- syn_96h_dmso[, colSums(syn_96h_dmso) > 99] # Very base R table subsetting
@@ -263,7 +264,7 @@ Compare those edge-sets and collect which are shared, differ in sign, or are uni
 all_corrs %<>%  mutate(
   edge = case_when(
     corr_apo == corr_dmso ~ "No Change",
-    ((corr_apo == "Negative" & corr_dmso == "Positive") | (corr_apo == "Positive" && corr_dmso == "Negative")) ~ "Sign change",
+    ((corr_apo == "Negative" & corr_dmso == "Positive") | (corr_apo == "Positive" & corr_dmso == "Negative")) ~ "Sign change",
     (corr_dmso == "NA") & (corr_apo != "NA") ~ "APO Only",
     (corr_dmso != "NA") & (corr_apo == "NA") ~ "DMSO Only",
     TRUE ~ "check me" # This should not happen, all conditions are covered above. If i forgot one, it will be labeled "check me".
@@ -337,7 +338,7 @@ full_net %<>%
 full_net %<>%   dplyr::mutate(
   edge =  dplyr::case_when(
     corr_1 == corr_2 ~ "No Change",
-    ((corr_1 == "Negative" & corr_2 == "Positive") | (corr_1 == "Positive" && corr_2 == "Negative")) ~ "Sign change",
+    ((corr_1 == "Negative" & corr_2 == "Positive") | (corr_1 == "Positive" & corr_2 == "Negative")) ~ "Sign change",
     (corr_2 == "NA") & (corr_1 != "NA") ~ paste(treat1, "Only"),
     (corr_2 != "NA") & (corr_1 == "NA") ~ paste(treat2, "Only"),
     TRUE ~ "check me"
