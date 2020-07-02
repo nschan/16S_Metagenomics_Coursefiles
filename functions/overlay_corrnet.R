@@ -28,7 +28,7 @@ overlay_corrnet <- function(network1 = NULL,
   full_net %<>%  mutate(
     edge = case_when(
       corr_1 == corr_2 ~ "No Change",
-      ((corr_1 == "Negative" & corr_2 == "Positive") | (corr_1 == "Positive" && corr_2 == "Negative")) ~ "Sign change",
+      ((corr_1 == "Negative" & corr_2 == "Positive") | (corr_1 == "Positive" & corr_2 == "Negative")) ~ "Sign change",
       (corr_2 == "NA") & (corr_1 != "NA") ~ paste(treat1, "Only"),
       (corr_2 != "NA") & (corr_1 == "NA") ~ paste(treat2, "Only"),
       TRUE ~ "check me"
