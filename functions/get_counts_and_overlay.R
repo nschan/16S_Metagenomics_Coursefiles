@@ -23,6 +23,7 @@ get_counts_and_overlay <- function(phyl, # Phyloseq object
   ## Add genus information
   counts %<>%  dplyr::left_join(phyl %>%    
                                   phyloseq::tax_table() %>%
+                                  as(., "matrix") %>% 
                                   as.data.frame() %>%
                                   tibble::rownames_to_column("Amplicon") %>%
                                   dplyr::select(Amplicon, eval(OTUcol)), by = "Amplicon")  %>%
